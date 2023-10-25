@@ -1,4 +1,4 @@
-# EDR-Process-Explorer
+# Falcon-Crowdstrike-Events-Processor
 This project process Falcon Crowdstrike logs available in .csv format.
 
 The result of processing will be split by agent ID (host).
