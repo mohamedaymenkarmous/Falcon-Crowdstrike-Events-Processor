@@ -3095,5 +3095,5 @@ getRelationship(json_tree)
 #print(json.dumps(json_graph))
 
 # Writing to sample.json
-with open(home+"/Documents/EDR-Process-Explorer/web/flare.json", "w") as outfile:
+with open(home+"/Documents/EDR-Process-Explorer/src/flare.json", "w") as outfile:
     outfile.write(json.dumps(json_tree))
