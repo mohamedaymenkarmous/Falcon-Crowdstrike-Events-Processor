@@ -7,14 +7,14 @@ Every section of agent ID will include the authentication attempts (successful a
 
 At the end of the output, there is a list of process IDs and thread IDs that are extracted from the processed logs (including the parent process IDs and thread IDs) that can be used in the SIEM to search for any additional results if that's needed.
 
-The same output of the process tree is saved in a JSON format inside the `~/Documents/EDR-Process-Explorer/web/flare.json` file in case you want to use this project [github.com/mohamedaymenkarmous/EDR-Process-Explorer](https://github.com/mohamedaymenkarmous/EDR-Process-Explorer) later to show the graphical process tree in a web page.
+The same output of the process tree is saved in a JSON format inside the `~/Documents/EDR-Process-Explorer/src/flare.json` file in case you want to use this project [github.com/mohamedaymenkarmous/EDR-Process-Explorer](https://github.com/mohamedaymenkarmous/EDR-Process-Explorer) later to show the graphical process tree in a web page.
 
 # Setup
-The web page can work only inside a web service. You can install any web service you like and then you need to place the content of the `src` directorry inside the `www` directory.
-If you don't want to install anything, you can setup the web service in python using the following command:
+You need to run the following commands:
 ```sh
 pip3 install --upgrade pip
 pip3 install pandas
+cd ~/Documents
 git clone https://github.com/mohamedaymenkarmous/Falcon-Crowdstrike-Events-Processor
 python3 ~/Documents/Falcon-Crowdstrike-Events-Processor/main.py --help
 ```
