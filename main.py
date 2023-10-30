@@ -4,6 +4,7 @@ import pandas as pd
 from datetime import datetime
 import math
 import json
+import csv
 from os.path import expanduser
 home = expanduser("~")
 
@@ -17,12 +18,20 @@ with open(home+"/Documents/Falcon-Crowdstrike-Events-Processor/config.json", "r"
   config_content = json.load(config_file)
   mapped_attr=config_content["mapped_attributes"]
 
+detect_patterns={}
+with open(home+"/Documents/Falcon-Crowdstrike-Events-Processor/detect_patterns.csv", "r") as csv_file:
+  csv_reader = csv.DictReader(csv_file)
+  for row in csv_reader:
+    detect_patterns[row["PatternId_decimal"]]=row
+
 # Read the CSV file into a pandas DataFrame
 df = pd.read_csv(args.filename)
 #df.sort_values(by=['0'], ascending=False)
 
 #config
-processes_events=('ProcessRollup2','SyntheticProcessRollup2','ProcessBlocked','CommandHistory')
+processes_events=('ProcessRollup2','SyntheticProcessRollup2','ProcessBlocked','CommandHistory','AssociateTreeIdWithRoot')
+authentications_events=('UserLogon','UserLogoff','UserLogonFailed','UserLogonFailed2')
+applications_events=('InstalledApplication')
 context_events=(
   'UserLogon','UserLogoff','UserLogonFailed','UserLogonFailed2',
   'HttpRequest',
@@ -34,11 +43,13 @@ context_events=(
   'TerminateProcess','EndOfProcess',
   'CreateService','ServiceStarted','ModifyServiceBinary',
   'SuspiciousCreateSymbolicLink','SuspiciousRegAsepUpdate',
-  'AsepValueUpdate',
+  'AsepValueUpdate','AsepKeyUpdate'
   'DirectoryCreate','FileOpenInfo','RansomwareOpenFile',
   'ExecutableDeleted','NewExecutableRenamed','NewExecutableWritten','NewScriptWritten',
-  'OleFileWritten','LnkFileWritten','JpegFileWritten','BmpFileWritten','CabFileWritten','PdfFileWritten','DmpFileWritten','ELFFileWritten','EmailFileWritten','EseFileWritten','GifFileWritten','JarFileWritten','LnkFileWritten','MsiFileWritten','ZipFileWritten','WebScriptFileWritten','TarFileWritten','PngFileWritten',
-  'ProcessInjection','InjectedThread','BrowserInjectedThread'
+  'OleFileWritten','LnkFileWritten','JpegFileWritten','BmpFileWritten','CabFileWritten','PdfFileWritten','DmpFileWritten','ELFFileWritten','EmailFileWritten','EseFileWritten','GifFileWritten','JarFileWritten','MsiFileWritten','ZipFileWritten','WebScriptFileWritten','TarFileWritten','PngFileWritten','RtfFileWritten',
+  'ProcessInjection','InjectedThread','BrowserInjectedThread',
+  'DllInjection',
+  'AssociateTreeIdWithRoot'
 )
 
 # Since some event names like SyntheticProcessRollup2 and CommandHistory don't have parent process IDs, it's going to be problem because multiple unrelated processes will have a common process empty process ID.
@@ -79,6 +90,7 @@ root_process_ids=[]
 all_ids=[]
 all_aid=[]
 authentications={}
+applications={}
 # Iterate over each row in the DataFrame
 for index, row in df.iterrows():
   if row[mapped_attr["aid"]] not in all_aid:
@@ -421,6 +433,154 @@ for index, row in df.iterrows():
         processes[parent_id]['AUTHENTICATION_ID']=processes[process_id]['PARENT_AUTHENTICATION_ID']
 
 
+
+for index, row in df.iterrows():
+  if row[mapped_attr["event_simpleName"]]=='AssociateTreeIdWithRoot':
+    if mapped_attr["TargetProcessId"] in row and row[mapped_attr["TargetProcessId"]]!='""' and row[mapped_attr["TargetProcessId"]]:
+      if isinstance(row[mapped_attr["TargetProcessId"]],float):
+        if math.isnan(row[mapped_attr["TargetProcessId"]]):
+          process_id=''
+        else:
+          process_id = row[mapped_attr["TargetProcessId"]].replace('"','')
+      else:
+        process_id = row[mapped_attr["TargetProcessId"]].replace('"','')
+    else:
+      process_id=''
+
+    if mapped_attr["ContextTimeStamp"] in row and row[mapped_attr["ContextTimeStamp"]]!='""' and row[mapped_attr["ContextTimeStamp"]]:
+      if isinstance(row[mapped_attr["ContextTimeStamp"]],float):
+        if math.isnan(row[mapped_attr["ContextTimeStamp"]]):
+          dt_instant = "0"
+        else:
+          dt_instant = datetime.fromtimestamp(float(row[mapped_attr["ContextTimeStamp"]]))
+      else:
+        dt_instant = datetime.fromtimestamp(float(str(row[mapped_attr["ContextTimeStamp"]]).replace('"','')))
+    else:
+      dt_instant="0"
+    if dt_instant=="0" and mapped_attr["timestamp"] in row and row[mapped_attr["timestamp"]]!='""' and row[mapped_attr["timestamp"]]:
+      if isinstance(row[mapped_attr["timestamp"]],float):
+        if math.isnan(row[mapped_attr["timestamp"]]):
+          dt_instant = "0"
+        else:
+          dt_instant = datetime.fromtimestamp(float(row[mapped_attr["timestamp"]])/1000)
+      else:
+        dt_instant = datetime.fromtimestamp(float(str(row[mapped_attr["timestamp"]]).replace('"',''))/1000)
+
+    if mapped_attr["PatternId"] in row and row[mapped_attr["PatternId"]]!='""' and row[mapped_attr["PatternId"]]:
+      if isinstance(row[mapped_attr["PatternId"]],float):
+        if math.isnan(row[mapped_attr["PatternId"]]):
+          pattern_id=''
+        else:
+          pattern_id=row[mapped_attr["PatternId"]].replace('"','')
+      else:
+        pattern_id=row[mapped_attr["PatternId"]].replace('"','')
+    else:
+      pattern_id=''
+
+    if mapped_attr["PatternDisposition"] in row and row[mapped_attr["PatternDisposition"]]!='""' and row[mapped_attr["PatternDisposition"]]:
+      if isinstance(row[mapped_attr["PatternDisposition"]],float):
+        if math.isnan(row[mapped_attr["PatternDisposition"]]):
+          pattern_disposition=''
+        else:
+          pattern_disposition=row[mapped_attr["PatternDisposition"]].replace('"','')
+      else:
+        pattern_disposition=row[mapped_attr["PatternDisposition"]].replace('"','')
+    else:
+      pattern_disposition=''
+    if pattern_disposition and pattern_disposition!='0':
+      pattern_disposition=hex(int(pattern_disposition))
+      input_hex_str=pattern_disposition
+      hexadecimal_list = [
+        {'key':2,'value':"'Detected'"},
+        {'key':16,'value':"'Process killed'"},
+        {'key':128,'value':"'File quarantined'"},
+        {'key':144,'value':"'Process killed and file quarantined'"},
+        {'key':272,'value':"'Process killed (reason: policy disabled)'"},
+        {'key':400,'value':"'Parent killed and file quarantined (failed: policy disabled)'"},
+        {'key':512,'value':"'Parent killed'"},
+        {'key':640,'value':"'Parent killed and file quarantined'"},
+        {'key':768,'value':"'arent killed (failed: policy disabled)'"},
+        {'key':1024,'value':"'Operation blocked'"},
+        {'key':1040,'value':"'Process killed and operation blocked'"},
+        {'key':1152,'value':"'File quarantined and operation blocked'"},
+        {'key':1168,'value':"'Process killed, file quarantined and operation blocked'"},
+        {'key':1280,'value':"'Operation blocked (failed: policy disabled)'"},
+        {'key':1296,'value':"'Process killed and operation blocked (failed: policy disabled)'"},
+        {'key':2048,'value':"'Process blocked'"},
+        {'key':2176,'value':"'Process blocked and file quarantined'"},
+        {'key':2304,'value':"'Process blocked (failed: policy disabled)'"},
+        {'key':2432,'value':"'Process blocked and file quarantined (failed: policy disabled)'"},
+        {'key':4096,'value':"'Registry operation blocked'"},
+        {'key':4112,'value':"'Registry operation blocked and process killed'"},
+        {'key':4224,'value':"'File quarantined and registry operation blocked'"},
+        {'key':4240,'value':"'Process killed, file quarantined and registry operation blocked'"},
+        {'key':4352,'value':"'Registry operation blocked (failed: policy disabled)'"},
+        {'key':4368,'value':"'Registry operation blocked and process killed (failed: policy disabled)'"},
+        {'key':5120,'value':"'Operation blocked and Registry operation blocked'"},
+        {'key':8192,'value':"'Critical process disabled'"},
+        {'key':8208,'value':"'Process killed (failed: critical process disabled)'"},
+        {'key':8320,'value':"'File quarantined (failed: critical process disabled)'"},
+        {'key':8704,'value':"'Parent killed (failed: critical process disabled)'"},
+        {'key':9216,'value':"'Operation blocked (failed: critical process disabled)'"},
+        {'key':10240,'value':"'Process blocked (failed: critical process disabled)'"},
+        {'key':12304,'value':"'Registry oeration blocked and process killed (failed: critical process disabled)'"},
+        {'key':16400,'value':"'Process killed (failed: boot safeguard enabled)'"},
+        {'key':32768,'value':"'FileSystem operation blocked'"},
+        {'key':32896,'value':"'File quarantined and FileSystem operation blocked'"},
+        {'key':33024,'value':"'FileSystem operation blocked (failed: policy disabled)'"},
+        {'key':65536,'value':"'Handle operation downgraded'"},
+        {'key':65552,'value':"'Process killed and handle operation downgraded'"},
+        {'key':65792,'value':"'Handle operation downgraded (failed: policy disabled)'"},
+        {'key':65808,'value':"'Process killed and handle operation downgraded (failed: policy disabled)'"},
+        {'key':73728,'value':"'Handle operation downgraded (failed: critical process disabled)'"},
+        {'key':73744,'value':"'Process killed and handle operation downgraded (failed: critical process disabled)'"},
+        {'key':131088,'value':"'Process killed (failed: kill action failed)'"},
+        {'key':131216,'value':"'Process killed and file quarantined (failed: kill action failed)'"},
+        {'key':131584,'value':"'Parent killed (failed: kill action failed)'"},
+        {'key':131712,'value':"'Parent killed and file quarantined (failed: kill action failed)'"},
+        {'key':2099200,'value':"'Process blocked (failed: response action already applied)'"},
+        {'key':2099328,'value':"'Process blocked and file quarantined (failed: response action already applied)'"},
+        {'key':4196352,'value':"'Process blocked (failed: response action failed)'"},
+        {'key':4196480,'value':"'Process blocked and file quarantined (failed: response action failed)'"}
+      ]
+      combinations = find_hex_combinations(input_hex_str, hexadecimal_list)
+      if len(combinations)>0:
+        pattern_disposition='('+(', '.join(combinations))+')'
+      else:
+        pattern_disposition="'No action'"
+    else:
+      pattern_disposition="'No action'"
+
+    if process_id and dt_instant:
+      processes[process_id]['PATTERN_ID'] = pattern_id
+      processes[process_id]['PATTERN_DISPOSITION'] = pattern_disposition
+      if pattern_id!='' and pattern_id in detect_patterns:
+        processes[process_id]['DETECTION_DESCRIPTION'] = detect_patterns[pattern_id]["description"]
+        processes[process_id]['DETECTION_KILLCHAIN_STAGE'] = detect_patterns[pattern_id]["killchain_stage"]
+        processes[process_id]['DETECTION_IOA_NAME'] = detect_patterns[pattern_id]["name"]
+        processes[process_id]['DETECTION_OBJECTIVE'] = detect_patterns[pattern_id]["objective"]
+        processes[process_id]['DETECTION_SCENARIO'] = detect_patterns[pattern_id]["scenario"]
+        processes[process_id]['DETECTION_SCENARIO_FRIENDLY'] = detect_patterns[pattern_id]["scenarioFriendly"]
+        processes[process_id]['DETECTION_SEVERITY'] = detect_patterns[pattern_id]["severity"]
+        processes[process_id]['DETECTION_TACTIC'] = detect_patterns[pattern_id]["tactic"]
+        processes[process_id]['DETECTION_TECHNIQUE'] = detect_patterns[pattern_id]["technique"]
+        processes[process_id]['DETECTION_VISIBILITY'] = detect_patterns[pattern_id]["show_in_ui"]
+        processes[process_id]['DETECTION_TIME'] = dt_instant
+      else:
+        processes[process_id]['DETECTION_DESCRIPTION'] = "Unknown ("+str(pattern_id)+")"
+        processes[process_id]['DETECTION_KILLCHAIN_STAGE'] = "Unknown ("+str(pattern_id)+")"
+        processes[process_id]['DETECTION_IOA_NAME'] = "Unknown ("+str(pattern_id)+")"
+        processes[process_id]['DETECTION_OBJECTIVE'] = "Unknown ("+str(pattern_id)+")"
+        processes[process_id]['DETECTION_SCENARIO'] = "Unknown ("+str(pattern_id)+")"
+        processes[process_id]['DETECTION_SCENARIO_FRIENDLY'] = "Unknown ("+str(pattern_id)+")"
+        processes[process_id]['DETECTION_SEVERITY'] = "Unknown ("+str(pattern_id)+")"
+        processes[process_id]['DETECTION_TACTIC'] = "Unknown ("+str(pattern_id)+")"
+        processes[process_id]['DETECTION_TECHNIQUE'] = "Unknown ("+str(pattern_id)+")"
+        processes[process_id]['DETECTION_VISIBILITY'] = "Unknown ("+str(pattern_id)+")"
+        processes[process_id]['DETECTION_TIME'] = dt_instant
+
+
+
 for index, row in df.iterrows():
   if row[mapped_attr["event_simpleName"]] in context_events:
     if mapped_attr["ContextProcessId"] in row and row[mapped_attr["ContextProcessId"]]!='""' and row[mapped_attr["ContextProcessId"]]:
@@ -465,6 +625,14 @@ for index, row in df.iterrows():
         dt_instant = datetime.fromtimestamp(float(str(row[mapped_attr["ContextTimeStamp"]]).replace('"','')))
     else:
       dt_instant="0"
+    if dt_instant=="0" and mapped_attr["timestamp"] in row and row[mapped_attr["timestamp"]]!='""' and row[mapped_attr["timestamp"]]:
+      if isinstance(row[mapped_attr["timestamp"]],float):
+        if math.isnan(row[mapped_attr["timestamp"]]):
+          dt_instant = "0"
+        else:
+          dt_instant = datetime.fromtimestamp(float(row[mapped_attr["timestamp"]])/1000)
+      else:
+        dt_instant = datetime.fromtimestamp(float(str(row[mapped_attr["timestamp"]]).replace('"',''))/1000)
 
     if mapped_attr["TargetProcessId"] in row and row[mapped_attr["TargetProcessId"]]!='""' and row[mapped_attr["TargetProcessId"]]:
       if isinstance(row[mapped_attr["TargetProcessId"]],float):
@@ -1599,6 +1767,17 @@ for index, row in df.iterrows():
     else:
       md5=''
 
+    if mapped_attr["InjectedDll"] in row and row[mapped_attr["InjectedDll"]]!='""' and row[mapped_attr["InjectedDll"]]:
+      if isinstance(row[mapped_attr["InjectedDll"]],float):
+        if math.isnan(row[mapped_attr["InjectedDll"]]):
+          injected_dll=''
+        else:
+          injected_dll=row[mapped_attr["InjectedDll"]].replace('"','')
+      else:
+        injected_dll=row[mapped_attr["InjectedDll"]].replace('"','')
+    else:
+      injected_dll=''
+
     if mapped_attr["InjectedThreadFlag"] in row and row[mapped_attr["InjectedThreadFlag"]]!='""' and row[mapped_attr["InjectedThreadFlag"]]:
       if isinstance(row[mapped_attr["InjectedThreadFlag"]],float):
         if math.isnan(row[mapped_attr["InjectedThreadFlag"]]):
@@ -1754,6 +1933,261 @@ for index, row in df.iterrows():
     else:
       executable_bytes=''
 
+    if mapped_attr["AppIs64Bit"] in row and row[mapped_attr["AppIs64Bit"]]!='""' and row[mapped_attr["AppIs64Bit"]]:
+      if isinstance(row[mapped_attr["AppIs64Bit"]],float):
+        if math.isnan(row[mapped_attr["AppIs64Bit"]]):
+          app_is_64bit=''
+        else:
+          app_is_64bit=row[mapped_attr["AppIs64Bit"]].replace('"','')
+      else:
+        app_is_64bit=row[mapped_attr["AppIs64Bit"]].replace('"','')
+    else:
+      app_is_64bit=''
+
+    if mapped_attr["AppName"] in row and row[mapped_attr["AppName"]]!='""' and row[mapped_attr["AppName"]]:
+      if isinstance(row[mapped_attr["AppName"]],float):
+        if math.isnan(row[mapped_attr["AppName"]]):
+          app_name=''
+        else:
+          app_name=row[mapped_attr["AppName"]].replace('"','')
+      else:
+        app_name=row[mapped_attr["AppName"]].replace('"','')
+    else:
+      app_name=''
+
+    if mapped_attr["AppPath"] in row and row[mapped_attr["AppPath"]]!='""' and row[mapped_attr["AppPath"]]:
+      if isinstance(row[mapped_attr["AppPath"]],float):
+        if math.isnan(row[mapped_attr["AppPath"]]):
+          app_path=''
+        else:
+          app_path=row[mapped_attr["AppPath"]].replace('"','')
+      else:
+        app_path=row[mapped_attr["AppPath"]].replace('"','')
+    else:
+      app_path=''
+
+    if mapped_attr["AppPathFlag"] in row and row[mapped_attr["AppPathFlag"]]!='""' and row[mapped_attr["AppPathFlag"]]:
+      if isinstance(row[mapped_attr["AppPathFlag"]],float):
+        if math.isnan(row[mapped_attr["AppPathFlag"]]):
+          app_path_flag=''
+        else:
+          app_path_flag=row[mapped_attr["AppPathFlag"]].replace('"','')
+      else:
+        app_path_flag=row[mapped_attr["AppPathFlag"]].replace('"','')
+    else:
+      app_path_flag=''
+    if app_path_flag:
+      app_path_flag=int(app_path_flag)
+      if app_path_flag==0:
+        app_path_flag="'App path invalid'"
+      elif app_path_flag==1:
+        app_path_flag="'Directory custom'"
+      elif app_path_flag==2:
+        app_path_flag="'File custom'"
+      elif app_path_flag==3:
+        app_path_flag="'File display icon'"
+      elif app_path_flag==4:
+        app_path_flag="'File uninstall string'"
+      elif app_path_flag==5:
+        app_path_flag="'File modify path'"
+      elif app_path_flag==6:
+        app_path_flag="'File CLSID local server32'"
+      elif app_path_flag==7:
+        app_path_flag="'File CLSID inproc server32'"
+      elif app_path_flag==8:
+        app_path_flag="'Directory install location'"
+      elif app_path_flag==9:
+        app_path_flag="'Directory install location failed MSI'"
+      elif app_path_flag==10:
+        app_path_flag="'File MSI local package'"
+      elif app_path_flag==11:
+        app_path_flag="'Failed no MSI file'"
+      elif app_path_flag==12:
+        app_path_flag="'Failed no uninstall info'"
+      elif app_path_flag==13:
+        app_path_flag="'Not available custom'"
+      elif app_path_flag==14:
+        app_path_flag="'Filesystem index'"
+
+    if mapped_attr["AppProductId"] in row and row[mapped_attr["AppProductId"]]!='""' and row[mapped_attr["AppProductId"]]:
+      if isinstance(row[mapped_attr["AppProductId"]],float):
+        if math.isnan(row[mapped_attr["AppProductId"]]):
+          app_product_id=''
+        else:
+          app_product_id=row[mapped_attr["AppProductId"]].replace('"','')
+      else:
+        app_product_id=row[mapped_attr["AppProductId"]].replace('"','')
+    else:
+      app_product_id=''
+
+    if mapped_attr["AppType"] in row and row[mapped_attr["AppType"]]!='""' and row[mapped_attr["AppType"]]:
+      if isinstance(row[mapped_attr["AppType"]],float):
+        if math.isnan(row[mapped_attr["AppType"]]):
+          app_type=''
+        else:
+          app_type=row[mapped_attr["AppType"]].replace('"','')
+      else:
+        app_type=row[mapped_attr["AppType"]].replace('"','')
+    else:
+      app_type=''
+    if app_type:
+      app_type=int(app_type)
+      if app_type==0:
+        app_type="'Type all'"
+      elif app_type==1:
+        app_type="'Type uninstall'"
+      elif app_type==2:
+        app_type="'Type CLSID'"
+      elif app_type==3:
+        app_type="'Type custom'"
+      elif app_type==4:
+        app_type="'Type Apple bunddle'"
+      elif app_type==1000:
+        app_type="'Type invalid'"
+
+    if mapped_attr["AppVendor"] in row and row[mapped_attr["AppVendor"]]!='""' and row[mapped_attr["AppVendor"]]:
+      if isinstance(row[mapped_attr["AppVendor"]],float):
+        if math.isnan(row[mapped_attr["AppVendor"]]):
+          app_vendor=''
+        else:
+          app_vendor=row[mapped_attr["AppVendor"]].replace('"','')
+      else:
+        app_vendor=row[mapped_attr["AppVendor"]].replace('"','')
+    else:
+      app_vendor=''
+
+    if mapped_attr["AppVersion"] in row and row[mapped_attr["AppVersion"]]!='""' and row[mapped_attr["AppVersion"]]:
+      if isinstance(row[mapped_attr["AppVersion"]],float):
+        if math.isnan(row[mapped_attr["AppVersion"]]):
+          app_version=''
+        else:
+          app_version=row[mapped_attr["AppVersion"]].replace('"','')
+      else:
+        app_version=row[mapped_attr["AppVersion"]].replace('"','')
+    else:
+      app_version=''
+
+    if mapped_attr["InstallDate"] in row and row[mapped_attr["InstallDate"]]!='""' and row[mapped_attr["InstallDate"]]:
+      if isinstance(row[mapped_attr["InstallDate"]],float):
+        if math.isnan(row[mapped_attr["InstallDate"]]):
+          install_date = "0"
+        else:
+          install_date = datetime.fromtimestamp(float(row[mapped_attr["InstallDate"]]))
+      else:
+        install_date = datetime.fromtimestamp(float(str(row[mapped_attr["InstallDate"]]).replace('"','')))
+    else:
+      install_date="0"
+
+    if mapped_attr["UpdateFlag"] in row and row[mapped_attr["UpdateFlag"]]!='""' and row[mapped_attr["UpdateFlag"]]:
+      if isinstance(row[mapped_attr["UpdateFlag"]],float):
+        if math.isnan(row[mapped_attr["UpdateFlag"]]):
+          update_flag=''
+        else:
+          update_flag=row[mapped_attr["UpdateFlag"]].replace('"','')
+      else:
+        update_flag=row[mapped_attr["UpdateFlag"]].replace('"','')
+    else:
+      update_flag=''
+    if update_flag:
+      update_flag=int(update_flag)
+      if update_flag==0:
+        update_flag="'Update invalid'"
+      elif update_flag==1:
+        update_flag="'Update enumeration'"
+      elif update_flag==2:
+        update_flag="'Update removed'"
+      elif update_flag==3:
+        update_flag="'Update added'"
+      elif update_flag==4:
+        update_flag="'Update obsolete'"
+      elif update_flag==5:
+        update_flag="'Update revised'"
+
+    if mapped_attr["PatternId"] in row and row[mapped_attr["PatternId"]]!='""' and row[mapped_attr["PatternId"]]:
+      if isinstance(row[mapped_attr["PatternId"]],float):
+        if math.isnan(row[mapped_attr["PatternId"]]):
+          pattern_id=''
+        else:
+          pattern_id=row[mapped_attr["PatternId"]].replace('"','')
+      else:
+        pattern_id=row[mapped_attr["PatternId"]].replace('"','')
+    else:
+      pattern_id=''
+
+    if mapped_attr["PatternDisposition"] in row and row[mapped_attr["PatternDisposition"]]!='""' and row[mapped_attr["PatternDisposition"]]:
+      if isinstance(row[mapped_attr["PatternDisposition"]],float):
+        if math.isnan(row[mapped_attr["PatternDisposition"]]):
+          pattern_disposition=''
+        else:
+          pattern_disposition=row[mapped_attr["PatternDisposition"]].replace('"','')
+      else:
+        pattern_disposition=row[mapped_attr["PatternDisposition"]].replace('"','')
+    else:
+      pattern_disposition=''
+    if pattern_disposition and pattern_disposition!='0':
+      pattern_disposition=hex(int(pattern_disposition))
+      input_hex_str=pattern_disposition
+      hexadecimal_list = [
+        {'key':2,'value':"'Detected'"},
+        {'key':16,'value':"'Process killed'"},
+        {'key':128,'value':"'File quarantined'"},
+        {'key':144,'value':"'Process killed and file quarantined'"},
+        {'key':272,'value':"'Process killed (reason: policy disabled)'"},
+        {'key':400,'value':"'Parent killed and file quarantined (failed: policy disabled)'"},
+        {'key':512,'value':"'Parent killed'"},
+        {'key':640,'value':"'Parent killed and file quarantined'"},
+        {'key':768,'value':"'arent killed (failed: policy disabled)'"},
+        {'key':1024,'value':"'Operation blocked'"},
+        {'key':1040,'value':"'Process killed and operation blocked'"},
+        {'key':1152,'value':"'File quarantined and operation blocked'"},
+        {'key':1168,'value':"'Process killed, file quarantined and operation blocked'"},
+        {'key':1280,'value':"'Operation blocked (failed: policy disabled)'"},
+        {'key':1296,'value':"'Process killed and operation blocked (failed: policy disabled)'"},
+        {'key':2048,'value':"'Process blocked'"},
+        {'key':2176,'value':"'Process blocked and file quarantined'"},
+        {'key':2304,'value':"'Process blocked (failed: policy disabled)'"},
+        {'key':2432,'value':"'Process blocked and file quarantined (failed: policy disabled)'"},
+        {'key':4096,'value':"'Registry operation blocked'"},
+        {'key':4112,'value':"'Registry operation blocked and process killed'"},
+        {'key':4224,'value':"'File quarantined and registry operation blocked'"},
+        {'key':4240,'value':"'Process killed, file quarantined and registry operation blocked'"},
+        {'key':4352,'value':"'Registry operation blocked (failed: policy disabled)'"},
+        {'key':4368,'value':"'Registry operation blocked and process killed (failed: policy disabled)'"},
+        {'key':5120,'value':"'Operation blocked and Registry operation blocked'"},
+        {'key':8192,'value':"'Critical process disabled'"},
+        {'key':8208,'value':"'Process killed (failed: critical process disabled)'"},
+        {'key':8320,'value':"'File quarantined (failed: critical process disabled)'"},
+        {'key':8704,'value':"'Parent killed (failed: critical process disabled)'"},
+        {'key':9216,'value':"'Operation blocked (failed: critical process disabled)'"},
+        {'key':10240,'value':"'Process blocked (failed: critical process disabled)'"},
+        {'key':12304,'value':"'Registry oeration blocked and process killed (failed: critical process disabled)'"},
+        {'key':16400,'value':"'Process killed (failed: boot safeguard enabled)'"},
+        {'key':32768,'value':"'FileSystem operation blocked'"},
+        {'key':32896,'value':"'File quarantined and FileSystem operation blocked'"},
+        {'key':33024,'value':"'FileSystem operation blocked (failed: policy disabled)'"},
+        {'key':65536,'value':"'Handle operation downgraded'"},
+        {'key':65552,'value':"'Process killed and handle operation downgraded'"},
+        {'key':65792,'value':"'Handle operation downgraded (failed: policy disabled)'"},
+        {'key':65808,'value':"'Process killed and handle operation downgraded (failed: policy disabled)'"},
+        {'key':73728,'value':"'Handle operation downgraded (failed: critical process disabled)'"},
+        {'key':73744,'value':"'Process killed and handle operation downgraded (failed: critical process disabled)'"},
+        {'key':131088,'value':"'Process killed (failed: kill action failed)'"},
+        {'key':131216,'value':"'Process killed and file quarantined (failed: kill action failed)'"},
+        {'key':131584,'value':"'Parent killed (failed: kill action failed)'"},
+        {'key':131712,'value':"'Parent killed and file quarantined (failed: kill action failed)'"},
+        {'key':2099200,'value':"'Process blocked (failed: response action already applied)'"},
+        {'key':2099328,'value':"'Process blocked and file quarantined (failed: response action already applied)'"},
+        {'key':4196352,'value':"'Process blocked (failed: response action failed)'"},
+        {'key':4196480,'value':"'Process blocked and file quarantined (failed: response action failed)'"}
+      ]
+      combinations = find_hex_combinations(input_hex_str, hexadecimal_list)
+      if len(combinations)>0:
+        pattern_disposition='('+(', '.join(combinations))+')'
+      else:
+        pattern_disposition="'No action'"
+    else:
+      pattern_disposition="'No action'"
+
     context={}
     context['EVENT_SIMPLE_NAME'] = row[mapped_attr["event_simpleName"]]
     context['PROCESS_INSTANT'] = dt_instant
@@ -1849,6 +2283,45 @@ for index, row in df.iterrows():
     context['EXECUTABLE_BYTES']= executable_bytes
     context['TARGET_PROCESS_ID']= target_process_id
     context['TARGET_THREAD_ID']= target_thread_id
+    context['INJECTED_DLL']= injected_dll
+    context['APP_IS_64BIT']= app_is_64bit
+    context['APP_NAME']= app_name
+    context['APP_PATH']= app_path
+    context['APP_PATH_FLAG']= app_path_flag
+    context['APP_PRODUCT_ID']= app_product_id
+    context['APP_TYPE']= app_type
+    context['APP_VENDOR']= app_vendor
+    context['APP_VERSION']= app_version
+    context['INSTALL_DATE']= install_date
+    context['UPDATE_FLAG']= update_flag
+    context['PATTERN_ID']= pattern_id
+    context['PATTERN_DISPOSITION']= pattern_disposition
+
+    if pattern_id!='' and pattern_id in detect_patterns:
+      context['DETECTION_DESCRIPTION'] = detect_patterns[pattern_id]["description"]
+      context['DETECTION_KILLCHAIN_STAGE'] = detect_patterns[pattern_id]["killchain_stage"]
+      context['DETECTION_IOA_NAME'] = detect_patterns[pattern_id]["name"]
+      context['DETECTION_OBJECTIVE'] = detect_patterns[pattern_id]["objective"]
+      context['DETECTION_SCENARIO'] = detect_patterns[pattern_id]["scenario"]
+      context['DETECTION_SCENARIO_FRIENDLY'] = detect_patterns[pattern_id]["scenarioFriendly"]
+      context['DETECTION_SEVERITY'] = detect_patterns[pattern_id]["severity"]
+      context['DETECTION_TACTIC'] = detect_patterns[pattern_id]["tactic"]
+      context['DETECTION_TECHNIQUE'] = detect_patterns[pattern_id]["technique"]
+      context['DETECTION_VISIBILITY'] = detect_patterns[pattern_id]["show_in_ui"]
+      context['DETECTION_TIME'] = dt_instant
+    else:
+      context['DETECTION_DESCRIPTION'] = "Unknown ("+str(pattern_id)+")"
+      context['DETECTION_KILLCHAIN_STAGE'] = "Unknown ("+str(pattern_id)+")"
+      context['DETECTION_IOA_NAME'] = "Unknown ("+str(pattern_id)+")"
+      context['DETECTION_OBJECTIVE'] = "Unknow ("+str(pattern_id)+")"
+      context['DETECTION_SCENARIO'] = "Unknown ("+str(pattern_id)+")"
+      context['DETECTION_SCENARIO_FRIENDLY'] = "Unknown ("+str(pattern_id)+")"
+      context['DETECTION_SEVERITY'] = "Unknown ("+str(pattern_id)+")"
+      context['DETECTION_TACTIC'] = "Unknown ("+str(pattern_id)+")"
+      context['DETECTION_TECHNIQUE'] = "Unknown ("+str(pattern_id)+")"
+      context['DETECTION_VISIBILITY'] = "Unknown ("+str(pattern_id)+")"
+      context['DETECTION_TIME'] = dt_instant
+
     # Update the process details
     # When a context exists
     if context_id and dt_instant:
@@ -1886,12 +2359,20 @@ for index, row in df.iterrows():
         #print(root_process_ids)
     # When a context doesn't exist
     elif context_id=='':
-      if row[mapped_attr["aid"]] in authentications and 'Context' in authentications[row[mapped_attr["aid"]]]:
-        authentications[row[mapped_attr["aid"]]]['Context'].append(context)
-      else:
-        authentications[row[mapped_attr["aid"]]]={}
-        authentications[row[mapped_attr["aid"]]]['Context']=[]
-        authentications[row[mapped_attr["aid"]]]['Context'].append(context)
+      if row[mapped_attr["event_simpleName"]] in authentications_events:
+        if row[mapped_attr["aid"]] in authentications and 'Context' in authentications[row[mapped_attr["aid"]]]:
+          authentications[row[mapped_attr["aid"]]]['Context'].append(context)
+        else:
+          authentications[row[mapped_attr["aid"]]]={}
+          authentications[row[mapped_attr["aid"]]]['Context']=[]
+          authentications[row[mapped_attr["aid"]]]['Context'].append(context)
+      elif row[mapped_attr["event_simpleName"]] in applications_events:
+        if row[mapped_attr["aid"]] in applications and 'Context' in applications[row[mapped_attr["aid"]]]:
+          applications[row[mapped_attr["aid"]]]['Context'].append(context)
+        else:
+          applications[row[mapped_attr["aid"]]]={}
+          applications[row[mapped_attr["aid"]]]['Context']=[]
+          applications[row[mapped_attr["aid"]]]['Context'].append(context)
 
     # Update the process details
     if rpc_client_process_id and dt_instant:
@@ -1928,13 +2409,20 @@ for index, row in df.iterrows():
         #print(processes[rpc_client_process_id])
         #print(root_process_ids)
     elif rpc_client_process_id=='':
-      if row[mapped_attr["aid"]] in authentications and 'Context' in authentications[row[mapped_attr["aid"]]]:
-        authentications[row[mapped_attr["aid"]]]['Context'].append(context)
-      else:
-        authentications[row[mapped_attr["aid"]]]={}
-        authentications[row[mapped_attr["aid"]]]['Context']=[]
-        authentications[row[mapped_attr["aid"]]]['Context'].append(context)
-
+      if row[mapped_attr["event_simpleName"]] in authentications_events:
+        if row[mapped_attr["aid"]] in authentications and 'Context' in authentications[row[mapped_attr["aid"]]]:
+          authentications[row[mapped_attr["aid"]]]['Context'].append(context)
+        else:
+          authentications[row[mapped_attr["aid"]]]={}
+          authentications[row[mapped_attr["aid"]]]['Context']=[]
+          authentications[row[mapped_attr["aid"]]]['Context'].append(context)
+      elif row[mapped_attr["event_simpleName"]] in applications_events:
+        if row[mapped_attr["aid"]] in applications and 'Context' in applications[row[mapped_attr["aid"]]]:
+          applications[row[mapped_attr["aid"]]]['Context'].append(context)
+        else:
+          applications[row[mapped_attr["aid"]]]={}
+          applications[row[mapped_attr["aid"]]]['Context']=[]
+          applications[row[mapped_attr["aid"]]]['Context'].append(context)
 
 # This part is obsolete and it was replaced with the next loop section because the inexistant process IDs became personalized
 #for index, row in df.iterrows():
@@ -2071,7 +2559,11 @@ def print_process_tree(process_id, indent='-->'):
             new_tmp=(', '.join(tmp)).replace("https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/manage/understand-security-identifiers","<a href='https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/manage/understand-security-identifiers'>here</a>")
             single_process_printed=single_process_printed+new_tmp+'<br/>'
 
-
+        if 'DETECTION_DESCRIPTION' in processes[process_id]:
+          print(f'{indent2}Detection (TTP: {process_details["DETECTION_TACTIC"]}, {process_details["DETECTION_TECHNIQUE"]}, {process_details["DETECTION_IOA_NAME"]}) (at {process_details["DETECTION_TIME"]}): {process_details["DETECTION_DESCRIPTION"]}')
+          single_process_printed=single_process_printed+f'Detection (TTP: {process_details["DETECTION_TACTIC"]}, {process_details["DETECTION_TECHNIQUE"]}, {process_details["DETECTION_IOA_NAME"]}) (at {process_details["DETECTION_TIME"]}): {process_details["DETECTION_DESCRIPTION"]}<br/>'
+          print(f'{indent2}Action: {process_details["PATTERN_DISPOSITION"]}, Scenario: {process_details["DETECTION_SCENARIO_FRIENDLY"]}, Objective: {process_details["DETECTION_OBJECTIVE"]}, Kill Chain Stage: {process_details["DETECTION_KILLCHAIN_STAGE"]}')
+          single_process_printed=single_process_printed+f'Action: {process_details["PATTERN_DISPOSITION"]}, Scenario: {process_details["DETECTION_SCENARIO_FRIENDLY"]}, Objective: {process_details["DETECTION_OBJECTIVE"]}, Kill Chain Stage: {process_details["DETECTION_KILLCHAIN_STAGE"]}<br/>'
 
         #print(process_details["Context"])
         if len(process_details["Context"])>0:
@@ -2091,6 +2583,15 @@ def print_process_tree(process_id, indent='-->'):
               indent4=indent3.replace('-->','    ')
               context_details_str=context_details_str+f'{indent4}{context["TARGET_FILE_NAME"]}\n'
               context_details_str2=context_details_str2+f'{context["TARGET_FILE_NAME"]}<br/>'
+            elif context['EVENT_SIMPLE_NAME']=='AssociateTreeIdWithRoot':
+              context_details_str=context_details_str+f'{indent3}Context (at {context["PROCESS_INSTANT"]})   >>!!!\033[33mSecurity Detection\033[0m!!!<<  ᕙ(⇀‸↼‶)ᕗ:\n'
+              context_details_str2=context_details_str2+f'Context (at {context["PROCESS_INSTANT"]})   >>!!!<span style="color:red">Security Detection</span>!!!<<  ᕙ(⇀‸↼‶)ᕗ:<br/>'
+              indent4=indent3.replace('-->','    ')
+              if 'DETECTION_DESCRIPTION' in context:
+                context_details_str=context_details_str+f'{indent4}Detection (TTP: {context["DETECTION_TACTIC"]}, {context["DETECTION_TECHNIQUE"]}, {context["DETECTION_IOA_NAME"]}): {context["DETECTION_DESCRIPTION"]}\n'
+                context_details_str2=context_details_str2+f'Detection (TTP: {context["DETECTION_TACTIC"]}, {context["DETECTION_TECHNIQUE"]}, {context["DETECTION_IOA_NAME"]}): {context["DETECTION_DESCRIPTION"]}<br/>'
+                context_details_str=context_details_str+f'{indent4}Action: {context["PATTERN_DISPOSITION"]}, Scenario: {context["DETECTION_SCENARIO_FRIENDLY"]}, Objective: {context["DETECTION_OBJECTIVE"]}, Kill Chain Stage: {context["DETECTION_KILLCHAIN_STAGE"]}\n'
+                context_details_str2=context_details_str2+f'Action: {context["PATTERN_DISPOSITION"]}, Scenario: {context["DETECTION_SCENARIO_FRIENDLY"]}, Objective: {context["DETECTION_OBJECTIVE"]}, Kill Chain Stage: {context["DETECTION_KILLCHAIN_STAGE"]}<br/>'
             elif context['EVENT_SIMPLE_NAME'] in ('ScriptControlBlocked'):
               context_details_str=context_details_str+f'{indent3}Context (at {context["PROCESS_INSTANT"]})   >>!!!\033[33m{context["EVENT_SIMPLE_NAME"]}\033[0m!!!<<  ᕙ(⇀‸↼‶)ᕗ:\n'
               context_details_str2=context_details_str2+f'Context (at {context["PROCESS_INSTANT"]})   >>!!!<span style="color:red">{context["EVENT_SIMPLE_NAME"]}</span>!!!<<  ᕙ(⇀‸↼‶)ᕗ:<br/>'
@@ -2105,19 +2606,19 @@ def print_process_tree(process_id, indent='-->'):
               context_details_str=context_details_str+f'{indent4}Script content: {context["SCRIPT_CONTENT"]}\n'
               context_details_str2=context_details_str2+f'Script content: {context["SCRIPT_CONTENT"]}<br/>'
             elif context['EVENT_SIMPLE_NAME']=='NetworkConnectIP4' or context['EVENT_SIMPLE_NAME']=='NetworkReceiveAcceptIP4':
-              context_details_str=context_details_str+f'{indent3}Context (at {context["PROCESS_INSTANT"]})   \033[33m{context["EVENT_SIMPLE_NAME"]}\033[0m:'
+              context_details_str=context_details_str+f'{indent3}Context (at {context["PROCESS_INSTANT"]})   \033[33m{context["EVENT_SIMPLE_NAME"]}\033[0m:\n'
               context_details_str2=context_details_str2+f'Context (at {context["PROCESS_INSTANT"]})   <span style="color:#fd8d3c">{context["EVENT_SIMPLE_NAME"]}</span>:<br/>'
               indent4=indent3.replace('-->','    ')
               context_details_str=context_details_str+f'{indent4}{context["LOCAL_ADDRESS_IP4"]}:{context["LOCAL_PORT"]} -> {context["REMOTE_ADDRESS_IP4"]}:{context["REMOTE_PORT"]} (Protocol:{context["PROTOCOL"]})\n'
               context_details_str2=context_details_str2+f'{context["LOCAL_ADDRESS_IP4"]}:{context["LOCAL_PORT"]} -> {context["REMOTE_ADDRESS_IP4"]}:{context["REMOTE_PORT"]} (Protocol:{context["PROTOCOL"]})<br/>'
             elif context['EVENT_SIMPLE_NAME']=='NetworkConnectIP6' or context['EVENT_SIMPLE_NAME']=='NetworkReceiveAcceptIP6':
-              context_details_str=context_details_str+f'{indent3}Context (at {context["PROCESS_INSTANT"]})   \033[33m{context["EVENT_SIMPLE_NAME"]}\033[0m:'
+              context_details_str=context_details_str+f'{indent3}Context (at {context["PROCESS_INSTANT"]})   \033[33m{context["EVENT_SIMPLE_NAME"]}\033[0m:\n'
               context_details_str2=context_details_str2+f'Context (at {context["PROCESS_INSTANT"]})   <span style="color:#fd8d3c">{context["EVENT_SIMPLE_NAME"]}</span>:<br/>'
               indent4=indent3.replace('-->','    ')
               context_details_str=context_details_str+f'{indent4}{context["LOCAL_ADDRESS_IP6"]}:{context["LOCAL_PORT"]} -> {context["REMOTE_ADDRESS_IP6"]}:{context["REMOTE_PORT"]} (Protocol:{context["PROTOCOL"]})\n'
               context_details_str2=context_details_str2+f'{context["LOCAL_ADDRESS_IP6"]}:{context["LOCAL_PORT"]} -> {context["REMOTE_ADDRESS_IP6"]}:{context["REMOTE_PORT"]} (Protocol:{context["PROTOCOL"]})<br/>'
             elif context['EVENT_SIMPLE_NAME'] in ('DnsRequest','SuspiciousDnsRequest'):
-              context_details_str=context_details_str+f'{indent3}Context (at {context["PROCESS_INSTANT"]})   \033[33m{context["EVENT_SIMPLE_NAME"]}\033[0m:'
+              context_details_str=context_details_str+f'{indent3}Context (at {context["PROCESS_INSTANT"]})   \033[33m{context["EVENT_SIMPLE_NAME"]}\033[0m:\n'
               context_details_str2=context_details_str2+f'Context (at {context["PROCESS_INSTANT"]})   <span style="color:#fd8d3c">{context["EVENT_SIMPLE_NAME"]}</span>:<br/>'
               indent4=indent3.replace('-->','    ')
               context_details_str=context_details_str+f'{indent4}Requested: {context["DOMAIN_NAME"]}\n'
@@ -2138,19 +2639,19 @@ def print_process_tree(process_id, indent='-->'):
                 context_details_str=context_details_str+f'{indent4}Query status: {context["QUERY_STATUS"]}\n'
                 context_details_str2=context_details_str2+f'Query status: {context["QUERY_STATUS"]}<br/>'
             elif context['EVENT_SIMPLE_NAME']=='CriticalFileAccessed':
-              context_details_str=context_details_str+f'{indent3}Context (at {context["PROCESS_INSTANT"]})   \033[33m{context["EVENT_SIMPLE_NAME"]}\033[0m:'
+              context_details_str=context_details_str+f'{indent3}Context (at {context["PROCESS_INSTANT"]})   \033[33m{context["EVENT_SIMPLE_NAME"]}\033[0m:\n'
               context_details_str2=context_details_str2+f'Context (at {context["PROCESS_INSTANT"]})   <span style="color:#fd8d3c">{context["EVENT_SIMPLE_NAME"]}</span>:<br/>'
               indent4=indent3.replace('-->','    ')
               context_details_str=context_details_str+f'{indent4}File name: {context["TARGET_FILE_NAME"]}\n'
               context_details_str2=context_details_str2+f'File name: {context["TARGET_FILE_NAME"]}<br/>'
             elif context['EVENT_SIMPLE_NAME'] in ('JavaClassFileWritten','GzipFileWritten','DirectoryCreate','ExecutableDeleted'):
-              context_details_str=context_details_str+f'{indent3}Context (at {context["PROCESS_INSTANT"]})   \033[33m{context["EVENT_SIMPLE_NAME"]}\033[0m:'
+              context_details_str=context_details_str+f'{indent3}Context (at {context["PROCESS_INSTANT"]})   \033[33m{context["EVENT_SIMPLE_NAME"]}\033[0m:\n'
               context_details_str2=context_details_str2+f'Context (at {context["PROCESS_INSTANT"]})   <span style="color:#fd8d3c">{context["EVENT_SIMPLE_NAME"]}</span>:<br/>'
               indent4=indent3.replace('-->','    ')
               context_details_str=context_details_str+f'{indent4}File name: {context["TARGET_FILE_NAME"]}\n'
               context_details_str2=context_details_str2+f'File name: {context["TARGET_FILE_NAME"]}<br/>'
-            elif context['EVENT_SIMPLE_NAME'] in ('OleFileWritten','LnkFileWritten','JpegFileWritten','BmpFileWritten','CabFileWritten','PdfFileWritten','DmpFileWritten','ELFFileWritten','EmailFileWritten','EseFileWritten','GifFileWritten','JarFileWritten','LnkFileWritten','MsiFileWritten','ZipFileWritten','WebScriptFileWritten','TarFileWritten','PngFileWritten'):
-              context_details_str=context_details_str+f'{indent3}Context (at {context["PROCESS_INSTANT"]})   \033[33m{context["EVENT_SIMPLE_NAME"]}\033[0m:'
+            elif context['EVENT_SIMPLE_NAME'] in ('OleFileWritten','LnkFileWritten','JpegFileWritten','BmpFileWritten','CabFileWritten','PdfFileWritten','DmpFileWritten','ELFFileWritten','EmailFileWritten','EseFileWritten','GifFileWritten','JarFileWritten','MsiFileWritten','ZipFileWritten','WebScriptFileWritten','TarFileWritten','PngFileWritten','RtfFileWritten'):
+              context_details_str=context_details_str+f'{indent3}Context (at {context["PROCESS_INSTANT"]})   \033[33m{context["EVENT_SIMPLE_NAME"]}\033[0m:\n'
               context_details_str2=context_details_str2+f'Context (at {context["PROCESS_INSTANT"]})   <span style="color:#fd8d3c">{context["EVENT_SIMPLE_NAME"]}</span>:<br/>'
               indent4=indent3.replace('-->','    ')
               context_details_str=context_details_str+f'{indent4}File name: {context["TARGET_FILE_NAME"]}\n'
@@ -2167,10 +2668,10 @@ def print_process_tree(process_id, indent='-->'):
                 context_details_str2=context_details_str2+(','.join(tmp))+'<br/>'
             elif context['EVENT_SIMPLE_NAME'] in ('FileOpenInfo','RansomwareOpenFile','NewExecutableWritten','NewScriptWritten'):
               if context['EVENT_SIMPLE_NAME']=='FileOpenInfo':
-                context_details_str=context_details_str+f'{indent3}Context (at {context["PROCESS_INSTANT"]})   \033[33mFile Opened\033[0m:'
+                context_details_str=context_details_str+f'{indent3}Context (at {context["PROCESS_INSTANT"]})   \033[33mFile Opened\033[0m:\n'
                 context_details_str2=context_details_str2+f'Context (at {context["PROCESS_INSTANT"]})   <span style="color:#fd8d3c">File Opened</span>:<br/>'
               else:
-                context_details_str=context_details_str+f'{indent3}Context (at {context["PROCESS_INSTANT"]})   \033[33m{context["EVENT_SIMPLE_NAME"]}\033[0m:'
+                context_details_str=context_details_str+f'{indent3}Context (at {context["PROCESS_INSTANT"]})   \033[33m{context["EVENT_SIMPLE_NAME"]}\033[0m:\n'
                 context_details_str2=context_details_str2+f'Context (at {context["PROCESS_INSTANT"]})   <span style="color:#fd8d3c">{context["EVENT_SIMPLE_NAME"]}</span>:<br/>'
               indent4=indent3.replace('-->','    ')
               context_details_str=context_details_str+f'{indent4}File name: {context["TARGET_FILE_NAME"]}\n'
@@ -2179,13 +2680,13 @@ def print_process_tree(process_id, indent='-->'):
                 context_details_str=context_details_str+f'{indent4}Status: {context["STATUS"]}\n'
                 context_details_str2=context_details_str2+f'Status: {context["STATUS"]}<br/>'
             elif context['EVENT_SIMPLE_NAME']=='NewExecutableRenamed':
-              context_details_str=context_details_str+f'{indent3}Context (at {context["PROCESS_INSTANT"]})   \033[33m{context["EVENT_SIMPLE_NAME"]}\033[0m:'
+              context_details_str=context_details_str+f'{indent3}Context (at {context["PROCESS_INSTANT"]})   \033[33m{context["EVENT_SIMPLE_NAME"]}\033[0m:\n'
               context_details_str2=context_details_str2+f'Context (at {context["PROCESS_INSTANT"]})   <span style="color:#fd8d3c">{context["EVENT_SIMPLE_NAME"]}</span>:<br/>'
               indent4=indent3.replace('-->','    ')
               context_details_str=context_details_str+f'{indent4}From :{context["SOURCE_FILE_NAME"]} --To-> {context["TARGET_FILE_NAME"]}\n'
               context_details_str2=context_details_str2+f'From :{context["SOURCE_FILE_NAME"]} --To-> {context["TARGET_FILE_NAME"]}<br/>'
             elif context['EVENT_SIMPLE_NAME']=='CreateService':
-              context_details_str=context_details_str+f'{indent3}Context (at {context["PROCESS_INSTANT"]})   \033[33m{context["EVENT_SIMPLE_NAME"]}\033[0m:'
+              context_details_str=context_details_str+f'{indent3}Context (at {context["PROCESS_INSTANT"]})   \033[33m{context["EVENT_SIMPLE_NAME"]}\033[0m:\n'
               context_details_str2=context_details_str2+f'Context (at {context["PROCESS_INSTANT"]})   <span style="color:#fd8d3c">{context["EVENT_SIMPLE_NAME"]}</span>:<br/>'
               indent4=indent3.replace('-->','    ')
               tmp1=""
@@ -2194,13 +2695,13 @@ def print_process_tree(process_id, indent='-->'):
               context_details_str=context_details_str+f'{indent4}Service name: {context["SERVICE_DISPLAY_NAME"]}, Image path: {context["SERVICE_IMAGE_PATH"]},{tmp1} Start status: {context["SERVICE_START"]}, Service type: {context["SERVICE_TYPE"]}, Error control: {context["SERVICE_ERROR_CONTROL"]}\n'
               context_details_str2=context_details_str2+f'Service name: {context["SERVICE_DISPLAY_NAME"]}, Image path: {context["SERVICE_IMAGE_PATH"]},{tmp1} Start status: {context["SERVICE_START"]}, Service type: {context["SERVICE_TYPE"]}, Error control: {context["SERVICE_ERROR_CONTROL"]}<br/>'
             elif context['EVENT_SIMPLE_NAME']=='ServiceStarted':
-              context_details_str=context_details_str+f'{indent3}Context (at {context["PROCESS_INSTANT"]})   \033[33m{context["EVENT_SIMPLE_NAME"]}\033[0m:'
+              context_details_str=context_details_str+f'{indent3}Context (at {context["PROCESS_INSTANT"]})   \033[33m{context["EVENT_SIMPLE_NAME"]}\033[0m:\n'
               context_details_str2=context_details_str2+f'Context (at {context["PROCESS_INSTANT"]})   <span style="color:#fd8d3c">{context["EVENT_SIMPLE_NAME"]}</span>:<br/>'
               indent4=indent3.replace('-->','    ')
               context_details_str=context_details_str+f'{indent4}Service name: {context["SERVICE_DISPLAY_NAME"]}, Image file name: {context["IMAGE_FILE_NAME"]}\n'
               context_details_str2=context_details_str2+f'Service name: {context["SERVICE_DISPLAY_NAME"]}, Image file name: {context["IMAGE_FILE_NAME"]}<br/>'
             elif context['EVENT_SIMPLE_NAME']=='ModifyServiceBinary':
-              context_details_str=context_details_str+f'{indent3}Context (at {context["PROCESS_INSTANT"]})   \033[33m{context["EVENT_SIMPLE_NAME"]}\033[0m:'
+              context_details_str=context_details_str+f'{indent3}Context (at {context["PROCESS_INSTANT"]})   \033[33m{context["EVENT_SIMPLE_NAME"]}\033[0m:\n'
               context_details_str2=context_details_str2+f'Context (at {context["PROCESS_INSTANT"]})   <span style="color:#fd8d3c">{context["EVENT_SIMPLE_NAME"]}</span>:<br/>'
               indent4=indent3.replace('-->','    ')
               tmp1=""
@@ -2209,33 +2710,44 @@ def print_process_tree(process_id, indent='-->'):
               context_details_str=context_details_str+f'{indent4}Service name: {context["SERVICE_DISPLAY_NAME"]},{tmp1} Image path: {context["SERVICE_IMAGE_PATH"]}, Error control: {context["SERVICE_ERROR_CONTROL"]}\n'
               context_details_str2=context_details_str2+f'Service name: {context["SERVICE_DISPLAY_NAME"]},{tmp1} Image path: {context["SERVICE_IMAGE_PATH"]}, Error control: {context["SERVICE_ERROR_CONTROL"]}<br/>'      
             elif context['EVENT_SIMPLE_NAME']=='HttpRequest':
-              context_details_str=context_details_str+f'{indent3}Context (at {context["PROCESS_INSTANT"]})   \033[33m{context["EVENT_SIMPLE_NAME"]}\033[0m:'
+              context_details_str=context_details_str+f'{indent3}Context (at {context["PROCESS_INSTANT"]})   \033[33m{context["EVENT_SIMPLE_NAME"]}\033[0m:\n'
               context_details_str2=context_details_str2+f'Context (at {context["PROCESS_INSTANT"]})   <span style="color:#fd8d3c">{context["EVENT_SIMPLE_NAME"]}</span>:<br/>'
               indent4=indent3.replace('-->','    ')
               context_details_str=context_details_str+f'{indent4}HTTP method: {context["HTTP_METHOD"]}, Hostname: {context["HTTP_HOST"]} ({context["REMOTE_ADDRESS_IP4"]}:{context["REMOTE_PORT"]}), HTTP Path: {context["HTTP_PATH"]}\n'
               context_details_str2=context_details_str2+f'HTTP method: {context["HTTP_METHOD"]}, Hostname: {context["HTTP_HOST"]} ({context["REMOTE_ADDRESS_IP4"]}:{context["REMOTE_PORT"]}), HTTP Path: {context["HTTP_PATH"]}<br/>'
             elif context['EVENT_SIMPLE_NAME']=='CriticalEnvironmentVariableChanged':
-              context_details_str=context_details_str+f'{indent3}Context (at {context["PROCESS_INSTANT"]})   \033[33m{context["EVENT_SIMPLE_NAME"]}\033[0m:'
+              context_details_str=context_details_str+f'{indent3}Context (at {context["PROCESS_INSTANT"]})   \033[33m{context["EVENT_SIMPLE_NAME"]}\033[0m:\n'
               context_details_str2=context_details_str2+f'Context (at {context["PROCESS_INSTANT"]})   <span style="color:#fd8d3c">{context["EVENT_SIMPLE_NAME"]}</span>:<br/>'
               indent4=indent3.replace('-->','    ')
               context_details_str=context_details_str+f'{indent4}Variable name: {context["ENVIRONMENT_VARIABLE_NAME"]}, Variable value: {context["ENVIRONMENT_VARIABLE_VALUE"]}\n'
               context_details_str2=context_details_str2+f'Variable name: {context["ENVIRONMENT_VARIABLE_NAME"]}, Variable value: {context["ENVIRONMENT_VARIABLE_VALUE"]}<br/>'
             elif context['EVENT_SIMPLE_NAME'] in ('TerminateProcess','EndOfProcess'):
-              context_details_str=context_details_str+f'{indent3}Context (at {context["PROCESS_INSTANT"]})   \033[33m{context["EVENT_SIMPLE_NAME"]}\033[0m:'
+              context_details_str=context_details_str+f'{indent3}Context (at {context["PROCESS_INSTANT"]})   \033[33m{context["EVENT_SIMPLE_NAME"]}\033[0m:\n'
               context_details_str2=context_details_str2+f'Context (at {context["PROCESS_INSTANT"]})   <span style="color:#fd8d3c">{context["EVENT_SIMPLE_NAME"]}</span>:<br/>'
               indent4=indent3.replace('-->','    ')
               context_details_str=context_details_str+f'{indent4}Process terminated\n'
               context_details_str2=context_details_str2+f'Process terminated<br/>'
             elif context['EVENT_SIMPLE_NAME']=="SuspiciousCreateSymbolicLink":
-              context_details_str=context_details_str+f'{indent3}Context (at {context["PROCESS_INSTANT"]})   \033[33m{context["EVENT_SIMPLE_NAME"]}\033[0m:'
+              context_details_str=context_details_str+f'{indent3}Context (at {context["PROCESS_INSTANT"]})   \033[33m{context["EVENT_SIMPLE_NAME"]}\033[0m:\n'
               context_details_str2=context_details_str2+f'Context (at {context["PROCESS_INSTANT"]})   <span style="color:#fd8d3c">{context["EVENT_SIMPLE_NAME"]}</span>:<br/>'
               indent4=indent3.replace('-->','    ')
               context_details_str=context_details_str+f'{indent4}Symbolic link name: {context["SYMBOLIC_LINK_NAME"]}, Symbolic link target: {context["SYMBOLIC_LINK_TARGET"]}\n'
               context_details_str2=context_details_str2+f'Symbolic link name: {context["SYMBOLIC_LINK_NAME"]}, Symbolic link target: {context["SYMBOLIC_LINK_TARGET"]}<br/>'
               context_details_str=context_details_str+f'{indent4}Status: {context["STATUS"]}\n'
               context_details_str2=context_details_str2+f'Status: {context["STATUS"]}<br/>'
+            elif context['EVENT_SIMPLE_NAME'] in ("DllInjection"):
+              context_details_str=context_details_str+f'{indent3}Context (at {context["PROCESS_INSTANT"]})   \033[33m{context["EVENT_SIMPLE_NAME"]}\033[0m:\n'
+              context_details_str2=context_details_str2+f'Context (at {context["PROCESS_INSTANT"]})   <span style="color:#fd8d3c">{context["EVENT_SIMPLE_NAME"]}</span>:<br/>'
+              indent4=indent3.replace('-->','    ')
+              context_details_str=context_details_str+f'{indent4}Target process ID: {context["TARGET_PROCESS_ID"]}, Target thread ID: {context["TARGET_THREAD_ID"]}, Injected thead flags: ({context["INJECTED_THREAD_FLAG"]})\n'
+              context_details_str2=context_details_str2+f'Target process ID: {context["TARGET_PROCESS_ID"]}, Target thread ID: {context["TARGET_THREAD_ID"]}, Injected thead flags: ({context["INJECTED_THREAD_FLAG"]})<br/>'
+              context_details_str=context_details_str+f'{indent4}Injected DLL: {context["INJECTED_DLL"]}\n'
+              context_details_str2=context_details_str2+f'Injected DLL: {context["INJECTED_DLL"]}<br/>'
+              if context["TARGET_PROCESS_ID"]!='' and context["TARGET_PROCESS_ID"] in processes and processes[context["TARGET_PROCESS_ID"]] and processes[context["TARGET_PROCESS_ID"]]['AID']:
+                context_details_str=context_details_str+f'{indent4}Associated command line: {context["REG_OBJECT_NAME"]}\n'
+                context_details_str2=context_details_str2+f'Associated command line: {context["REG_OBJECT_NAME"]}<br/>'
             elif context['EVENT_SIMPLE_NAME'] in ("InjectedThread","BrowserInjectedThread"):
-              context_details_str=context_details_str+f'{indent3}Context (at {context["PROCESS_INSTANT"]})   \033[33m{context["EVENT_SIMPLE_NAME"]}\033[0m:'
+              context_details_str=context_details_str+f'{indent3}Context (at {context["PROCESS_INSTANT"]})   \033[33m{context["EVENT_SIMPLE_NAME"]}\033[0m:\n'
               context_details_str2=context_details_str2+f'Context (at {context["PROCESS_INSTANT"]})   <span style="color:#fd8d3c">{context["EVENT_SIMPLE_NAME"]}</span>:<br/>'
               indent4=indent3.replace('-->','    ')
               context_details_str=context_details_str+f'{indent4}Target process ID: {context["TARGET_PROCESS_ID"]}, Target thread ID: {context["TARGET_THREAD_ID"]}, Injected thead flags: ({context["INJECTED_THREAD_FLAG"]})\n'
@@ -2244,7 +2756,7 @@ def print_process_tree(process_id, indent='-->'):
                 context_details_str=context_details_str+f'{indent4}Associated command line: {context["REG_OBJECT_NAME"]}\n'
                 context_details_str2=context_details_str2+f'Associated command line: {context["REG_OBJECT_NAME"]}<br/>'
             elif context['EVENT_SIMPLE_NAME']=="ProcessInjection":
-              context_details_str=context_details_str+f'{indent3}Context (at {context["PROCESS_INSTANT"]})   \033[33m{context["EVENT_SIMPLE_NAME"]}\033[0m:'
+              context_details_str=context_details_str+f'{indent3}Context (at {context["PROCESS_INSTANT"]})   \033[33m{context["EVENT_SIMPLE_NAME"]}\033[0m:\n'
               context_details_str2=context_details_str2+f'Context (at {context["PROCESS_INSTANT"]})   <span style="color:#fd8d3c">{context["EVENT_SIMPLE_NAME"]}</span>:<br/>'
               indent4=indent3.replace('-->','    ')
               context_details_str=context_details_str+f'{indent4}Target process ID: {context["TARGET_PROCESS_ID"]}, Target thread ID: {context["TARGET_THREAD_ID"]}, Thread execution control type: {context["THREAD_EXECUTION_CONTROL_TYPE"]}, Well known target function: {context["WELL_KNOWN_TARGET_FUNCTION"]}\n'
@@ -2259,8 +2771,8 @@ def print_process_tree(process_id, indent='-->'):
               if context["EXECUTABLE_BYTES"]!='':
                 context_details_str=context_details_str+f'{indent4}Executable bytes: {context["EXECUTABLE_BYTES"]}\n'
                 context_details_str2=context_details_str2+f'Executable bytes: {context["EXECUTABLE_BYTES"]}<br/>'
-            elif context['EVENT_SIMPLE_NAME']=="AsepValueUpdate":
-              context_details_str=context_details_str+f'{indent3}Context (at {context["PROCESS_INSTANT"]})   \033[33m{context["EVENT_SIMPLE_NAME"]}\033[0m:'
+            elif context['EVENT_SIMPLE_NAME'] in ("AsepValueUpdate","AsepKeyUpdate"):
+              context_details_str=context_details_str+f'{indent3}Context (at {context["PROCESS_INSTANT"]})   \033[33m{context["EVENT_SIMPLE_NAME"]}\033[0m:\n'
               context_details_str2=context_details_str2+f'Context (at {context["PROCESS_INSTANT"]})   <span style="color:#fd8d3c">{context["EVENT_SIMPLE_NAME"]}</span>:<br/>'
               indent4=indent3.replace('-->','    ')
               context_details_str=context_details_str+f'{indent4}Registry operation type: {context["REG_OPERATION_TYPE"]}\n'
@@ -2287,7 +2799,7 @@ def print_process_tree(process_id, indent='-->'):
                 context_details_str=context_details_str+f'{indent4}Target file: {context["TARGET_FILE_NAME"]} (SHA26: {context["TARGET_SHA256_HASH_DATA"]})\n'
                 context_details_str2=context_details_str2+f'Target file: {context["TARGET_FILE_NAME"]} (SHA26: {context["TARGET_SHA256_HASH_DATA"]})<br/>'
             elif context['EVENT_SIMPLE_NAME']=="SuspiciousRegAsepUpdate":
-              context_details_str=context_details_str+f'{indent3}Context (at {context["PROCESS_INSTANT"]})   \033[33m{context["EVENT_SIMPLE_NAME"]}\033[0m:'
+              context_details_str=context_details_str+f'{indent3}Context (at {context["PROCESS_INSTANT"]})   \033[33m{context["EVENT_SIMPLE_NAME"]}\033[0m:\n'
               context_details_str2=context_details_str2+f'Context (at {context["PROCESS_INSTANT"]})   <span style="color:#fd8d3c">{context["EVENT_SIMPLE_NAME"]}</span>:<br/>'
               indent4=indent3.replace('-->','    ')
               context_details_str=context_details_str+f'{indent4}Registry operation type: {context["REG_OPERATION_TYPE"]}\n'
@@ -2319,7 +2831,7 @@ def print_process_tree(process_id, indent='-->'):
                 context_details_str=context_details_str+f'{indent4}Target file: {context["TARGET_FILE_NAME"]} (SHA26: {context["TARGET_SHA256_HASH_DATA"]})\n'
                 context_details_str2=context_details_str2+f'Target file: {context["TARGET_FILE_NAME"]} (SHA26: {context["TARGET_SHA256_HASH_DATA"]})<br/>'
             elif context['EVENT_SIMPLE_NAME'] in ('UserLogon','UserLogoff','UserLogonFailed','UserLogonFailed2'):
-              context_details_str=context_details_str+f'{indent3}Context (at {context["PROCESS_INSTANT"]})   \033[33m{context["EVENT_SIMPLE_NAME"]}\033[0m:'
+              context_details_str=context_details_str+f'{indent3}Context (at {context["PROCESS_INSTANT"]})   \033[33m{context["EVENT_SIMPLE_NAME"]}\033[0m:\n'
               context_details_str2=context_details_str2+f'Context (at {context["PROCESS_INSTANT"]})   <span style="color:#fd8d3c">{context["EVENT_SIMPLE_NAME"]}</span>:<br/>'
               indent4=indent3.replace('-->','    ')
               print_single_authentication_detail_result=print_single_authentication_detail(indent4[4:],context,context_header=False,extra_line_break=False)
@@ -2373,7 +2885,7 @@ def print_authentication_details(authentication):
         #print(authentication)
         if len(authentication["Context"])>0:
           for context in authentication["Context"]:
-            if context['EVENT_SIMPLE_NAME'] in ('UserLogon','UserLogoff','UserLogonFailed','UserLogonFailed2'):
+            if context['EVENT_SIMPLE_NAME'] in authentications_events:
               print(print_single_authentication_detail('',context,context_header=True,extra_line_break=True)["shell"])
 
 
@@ -2393,7 +2905,7 @@ def print_single_authentication_detail(indent,context,context_header=False,extra
                   None
                 else:
                   message=message+f' (at {context["PROCESS_INSTANT"]})'
-                #message=message+f'   \033[33m{context["EVENT_SIMPLE_NAME"]}\033[0m:'
+                #message=message+f'   \033[33m{context["EVENT_SIMPLE_NAME"]}\033[0m:\n'
                 #print(message)
                 context_details_str=context_details_str+message+f'   \033[33m{context["EVENT_SIMPLE_NAME"]}\033[0m:\n'
                 context_details_str2=context_details_str2+message+f'   <span style="color:#fd8d3c">{context["EVENT_SIMPLE_NAME"]}</span>:<br/>'
@@ -2464,6 +2976,60 @@ def print_single_authentication_detail(indent,context,context_header=False,extra
                 #print()
               return {"shell":context_details_str,"html":context_details_str2}
 
+
+# Function application details
+def print_applications_details(application):
+        #print(application)
+        if len(application["Context"])>0:
+          for context in application["Context"]:
+            if context['EVENT_SIMPLE_NAME'] in applications_events:
+              print(print_single_applications_detail('',context,context_header=True,extra_line_break=True)["shell"])
+
+
+def print_single_applications_detail(indent,context,context_header=False,extra_line_break=False):
+              indent2='    '
+              context_details_str=f'{indent}Context'
+              context_details_str2=f'Context'
+              message=f''
+              if context["CONTEXT_ID"] and context["CONTEXT_ID"]!='0':
+                message=message+f' (ID: {context["CONTEXT_ID"]})'
+              if context_header:
+                message=message+f' (at {context["PROCESS_INSTANT"]})'
+                #message=message+f'   \033[33m{context["EVENT_SIMPLE_NAME"]}\033[0m:\n'
+                #print(message)
+                context_details_str=context_details_str+message+f'   \033[33m{context["EVENT_SIMPLE_NAME"]}\033[0m:\n'
+                context_details_str2=context_details_str2+message+f'   <span style="color:#fd8d3c">{context["EVENT_SIMPLE_NAME"]}</span>:<br/>'
+              message=f'Application name: {context["APP_NAME"]}'
+              if context["APP_PRODUCT_ID"]:
+                message=message+f', Product ID: "{context["APP_PRODUCT_ID"]}"'
+              if context["APP_VENDOR"]:
+                message=message+f', Vendor: {context["APP_VENDOR"]}'
+              context_details_str=context_details_str+indent+indent2+message+f'\n'
+              context_details_str2=context_details_str2+message+f'<br/>'
+              #print(message)
+              message=f'Application path: {context["APP_PATH"]}'
+              context_details_str=context_details_str+indent+indent2+message+f'\n'
+              context_details_str2=context_details_str2+message+f'<br/>'
+              message=f'Application type: {context["APP_TYPE"]}'
+              if context["APP_PATH_FLAG"]:
+                message=message+f', Path flag: {context["APP_PATH_FLAG"]}'
+              if context["APP_IS_64BIT"]:
+                message=message+f', Is 64 bits: {context["APP_IS_64BIT"]}'
+              if context["APP_VERSION"]:
+                message=message+f', Version: {context["APP_VERSION"]}'
+              if context["UPDATE_FLAG"]:
+                message=message+f', Update flag: {context["UPDATE_FLAG"]}'
+              if context["UPDATE_FLAG"]:
+                message=message+f', Install date: {context["INSTALL_DATE"]}'
+              context_details_str=context_details_str+indent+indent2+message+f'\n'
+              context_details_str2=context_details_str2+message+f'<br/>'
+              if extra_line_break:
+                context_details_str=context_details_str+f'\n'
+                context_details_str2=context_details_str2+f'<br/>'
+                #print()
+              return {"shell":context_details_str,"html":context_details_str2}
+
+
 #print(root_process_ids)
 # Starting from the root process, print the process tree
 root_process_id = 0  # Set the root process ID here
@@ -2476,6 +3042,9 @@ for aid in all_aid:
         if aid in authentications:
           print("\nAuthentications:")
           print_authentication_details(authentications[aid])
+        if aid in applications:
+          print("\nApplications:")
+          print_applications_details(applications[aid])
       print("\nProcess Tree N°"+str(i)+":")
       single_process_in_a_tree={
           "name": "Process Tree N°"+str(i)+":",
@@ -2528,5 +3097,3 @@ getRelationship(json_tree)
 # Writing to sample.json
 with open(home+"/Documents/EDR-Process-Explorer/web/flare.json", "w") as outfile:
     outfile.write(json.dumps(json_tree))
-
-
