@@ -106,6 +106,20 @@
 	    "ThreadExecutionControlType":"THREADEXECUTIONCONTROLTYPE",
 	    "WellKnownTargetFunction":"WELLKNOWNTARGETFUNCTION",
 	    "ExecutableBytes":"EXECUTABLEBYTES",
-	    "ServiceStart":"SERVICESTART"
+	    "ServiceStart":"SERVICESTART",
+	    "InjectedDll":"INJECTEDDLL",
+	    "AppIs64Bit":"APPIS64BIT",
+	    "AppName":"APPNAME",
+	    "AppPath":"APPPATH",
+	    "AppPathFlag":"APPPATHFLAG",
+	    "AppProductId":"APPPRODUCTID",
+	    "AppType":"APPTYPE",
+	    "AppVendor":"APPVENDOR",
+	    "AppVersion":"APPVERSION",
+	    "InstallDate":"INSTALLDATE",
+	    "UpdateFlag":"UPDATEFLAG",
+	    "timestamp":"TIMESTAMP",
+	    "PatternId":"PATTERNID",
+	    "PatternDisposition":"PATTERNDISPOSITION"
 	}
 }
