@@ -29,7 +29,7 @@ df = pd.read_csv(args.filename)
 #df.sort_values(by=['0'], ascending=False)
 
 #config
-processes_events=('ProcessRollup2','SyntheticProcessRollup2','ProcessBlocked','CommandHistory','AssociateTreeIdWithRoot')
+processes_events=('ProcessRollup2','SyntheticProcessRollup2','ProcessBlocked','CommandHistory')
 authentications_events=('UserLogon','UserLogoff','UserLogonFailed','UserLogonFailed2')
 applications_events=('InstalledApplication')
 context_events=(
@@ -49,7 +49,7 @@ context_events=(
   'OleFileWritten','LnkFileWritten','JpegFileWritten','BmpFileWritten','CabFileWritten','PdfFileWritten','DmpFileWritten','ELFFileWritten','EmailFileWritten','EseFileWritten','GifFileWritten','JarFileWritten','MsiFileWritten','ZipFileWritten','WebScriptFileWritten','TarFileWritten','PngFileWritten','RtfFileWritten',
   'ProcessInjection','InjectedThread','BrowserInjectedThread',
   'DllInjection',
-  'AssociateTreeIdWithRoot'
+  'AssociateTreeIdWithRoot','AssociateIndicator'
 )
 
 # Since some event names like SyntheticProcessRollup2 and CommandHistory don't have parent process IDs, it's going to be problem because multiple unrelated processes will have a common process empty process ID.
@@ -435,7 +435,7 @@ for index, row in df.iterrows():
 
 
 for index, row in df.iterrows():
-  if row[mapped_attr["event_simpleName"]]=='AssociateTreeIdWithRoot':
+  if row[mapped_attr["event_simpleName"]] in ('AssociateTreeIdWithRoot','AssociateIndicator'):
     if mapped_attr["TargetProcessId"] in row and row[mapped_attr["TargetProcessId"]]!='""' and row[mapped_attr["TargetProcessId"]]:
       if isinstance(row[mapped_attr["TargetProcessId"]],float):
         if math.isnan(row[mapped_attr["TargetProcessId"]]):
@@ -2560,8 +2560,8 @@ def print_process_tree(process_id, indent='-->'):
             single_process_printed=single_process_printed+new_tmp+'<br/>'
 
         if 'DETECTION_DESCRIPTION' in processes[process_id]:
-          print(f'{indent2}Detection (TTP: {process_details["DETECTION_TACTIC"]}, {process_details["DETECTION_TECHNIQUE"]}, {process_details["DETECTION_IOA_NAME"]}) (at {process_details["DETECTION_TIME"]}): {process_details["DETECTION_DESCRIPTION"]}')
-          single_process_printed=single_process_printed+f'Detection (TTP: {process_details["DETECTION_TACTIC"]}, {process_details["DETECTION_TECHNIQUE"]}, {process_details["DETECTION_IOA_NAME"]}) (at {process_details["DETECTION_TIME"]}): {process_details["DETECTION_DESCRIPTION"]}<br/>'
+          print(f'{indent2}Security Detection (TTP: {process_details["DETECTION_TACTIC"]}, {process_details["DETECTION_TECHNIQUE"]}, {process_details["DETECTION_IOA_NAME"]}) (at {process_details["DETECTION_TIME"]}): {process_details["DETECTION_DESCRIPTION"]}')
+          single_process_printed=single_process_printed+f'Security Detection (TTP: {process_details["DETECTION_TACTIC"]}, {process_details["DETECTION_TECHNIQUE"]}, {process_details["DETECTION_IOA_NAME"]}) (at {process_details["DETECTION_TIME"]}): {process_details["DETECTION_DESCRIPTION"]}<br/>'
           print(f'{indent2}Action: {process_details["PATTERN_DISPOSITION"]}, Scenario: {process_details["DETECTION_SCENARIO_FRIENDLY"]}, Objective: {process_details["DETECTION_OBJECTIVE"]}, Kill Chain Stage: {process_details["DETECTION_KILLCHAIN_STAGE"]}')
           single_process_printed=single_process_printed+f'Action: {process_details["PATTERN_DISPOSITION"]}, Scenario: {process_details["DETECTION_SCENARIO_FRIENDLY"]}, Objective: {process_details["DETECTION_OBJECTIVE"]}, Kill Chain Stage: {process_details["DETECTION_KILLCHAIN_STAGE"]}<br/>'
 
@@ -2583,13 +2583,13 @@ def print_process_tree(process_id, indent='-->'):
               indent4=indent3.replace('-->','    ')
               context_details_str=context_details_str+f'{indent4}{context["TARGET_FILE_NAME"]}\n'
               context_details_str2=context_details_str2+f'{context["TARGET_FILE_NAME"]}<br/>'
-            elif context['EVENT_SIMPLE_NAME']=='AssociateTreeIdWithRoot':
+            elif context['EVENT_SIMPLE_NAME'] in ('AssociateTreeIdWithRoot','AssociateIndicator'):
               context_details_str=context_details_str+f'{indent3}Context (at {context["PROCESS_INSTANT"]})   >>!!!\033[33mSecurity Detection\033[0m!!!<<  ᕙ(⇀‸↼‶)ᕗ:\n'
               context_details_str2=context_details_str2+f'Context (at {context["PROCESS_INSTANT"]})   >>!!!<span style="color:red">Security Detection</span>!!!<<  ᕙ(⇀‸↼‶)ᕗ:<br/>'
               indent4=indent3.replace('-->','    ')
               if 'DETECTION_DESCRIPTION' in context:
-                context_details_str=context_details_str+f'{indent4}Detection (TTP: {context["DETECTION_TACTIC"]}, {context["DETECTION_TECHNIQUE"]}, {context["DETECTION_IOA_NAME"]}): {context["DETECTION_DESCRIPTION"]}\n'
-                context_details_str2=context_details_str2+f'Detection (TTP: {context["DETECTION_TACTIC"]}, {context["DETECTION_TECHNIQUE"]}, {context["DETECTION_IOA_NAME"]}): {context["DETECTION_DESCRIPTION"]}<br/>'
+                context_details_str=context_details_str+f'{indent4}Security Detection (TTP: {context["DETECTION_TACTIC"]}, {context["DETECTION_TECHNIQUE"]}, {context["DETECTION_IOA_NAME"]}): {context["DETECTION_DESCRIPTION"]}\n'
+                context_details_str2=context_details_str2+f'Security Detection (TTP: {context["DETECTION_TACTIC"]}, {context["DETECTION_TECHNIQUE"]}, {context["DETECTION_IOA_NAME"]}): {context["DETECTION_DESCRIPTION"]}<br/>'
                 context_details_str=context_details_str+f'{indent4}Action: {context["PATTERN_DISPOSITION"]}, Scenario: {context["DETECTION_SCENARIO_FRIENDLY"]}, Objective: {context["DETECTION_OBJECTIVE"]}, Kill Chain Stage: {context["DETECTION_KILLCHAIN_STAGE"]}\n'
                 context_details_str2=context_details_str2+f'Action: {context["PATTERN_DISPOSITION"]}, Scenario: {context["DETECTION_SCENARIO_FRIENDLY"]}, Objective: {context["DETECTION_OBJECTIVE"]}, Kill Chain Stage: {context["DETECTION_KILLCHAIN_STAGE"]}<br/>'
             elif context['EVENT_SIMPLE_NAME'] in ('ScriptControlBlocked'):
