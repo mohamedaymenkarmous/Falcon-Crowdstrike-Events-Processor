@@ -49,7 +49,8 @@ context_events=(
   'OleFileWritten','LnkFileWritten','JpegFileWritten','BmpFileWritten','CabFileWritten','PdfFileWritten','DmpFileWritten','ELFFileWritten','EmailFileWritten','EseFileWritten','GifFileWritten','JarFileWritten','MsiFileWritten','ZipFileWritten','WebScriptFileWritten','TarFileWritten','PngFileWritten','RtfFileWritten',
   'ProcessInjection','InjectedThread','BrowserInjectedThread',
   'DllInjection',
-  'AssociateTreeIdWithRoot','AssociateIndicator'
+  'AssociateTreeIdWithRoot','AssociateIndicator',
+  'ClassifiedModuleLoad'
 )
 
 # Since some event names like SyntheticProcessRollup2 and CommandHistory don't have parent process IDs, it's going to be problem because multiple unrelated processes will have a common process empty process ID.
@@ -2188,6 +2189,117 @@ for index, row in df.iterrows():
     else:
       pattern_disposition="'No action'"
 
+    if mapped_attr["MappedFromUserMode"] in row and row[mapped_attr["MappedFromUserMode"]]!='""' and row[mapped_attr["MappedFromUserMode"]]:
+      if isinstance(row[mapped_attr["MappedFromUserMode"]],float):
+        if math.isnan(row[mapped_attr["MappedFromUserMode"]]):
+          mapped_from_user_mode=''
+        else:
+          mapped_from_user_mode=row[mapped_attr["MappedFromUserMode"]].replace('"','')
+      else:
+        mapped_from_user_mode=row[mapped_attr["MappedFromUserMode"]].replace('"','')
+    else:
+      mapped_from_user_mode=''
+
+    if mapped_attr["ModuleCharacteristics"] in row and row[mapped_attr["ModuleCharacteristics"]]!='""' and row[mapped_attr["ModuleCharacteristics"]]:
+      if isinstance(row[mapped_attr["ModuleCharacteristics"]],float):
+        if math.isnan(row[mapped_attr["ModuleCharacteristics"]]):
+          module_characteristics=''
+        else:
+          module_characteristics=row[mapped_attr["ModuleCharacteristics"]].replace('"','')
+      else:
+        module_characteristics=row[mapped_attr["ModuleCharacteristics"]].replace('"','')
+    else:
+      module_characteristics=''
+    if module_characteristics:
+      module_characteristics=hex(int(module_characteristics))
+      input_hex_str=module_characteristics
+      hexadecimal_list = [
+        {'key':0x1,'value':"'SIGNATURE_FLAG_SELF_SIGNED'"},
+        {'key':0x2,'value':"'SIGNATURE_FLAG_MS_SIGNED'"},
+        {'key':0x4,'value':"'SIGNATURE_FLAG_TEST_SIGNED'"},
+        {'key':0x8,'value':"'SIGNATURE_FLAG_MS_CROSS_SIGNED'"},
+        {'key':0x10,'value':"'SIGNATURE_FLAG_CAT_SIGNED'"},
+        {'key':0x20,'value':"'SIGNATURE_FLAG_DRM_SIGNED'"},
+        {'key':0x40,'value':"'SIGNATURE_FLAG_DRM_TEST_SIGNED'"},
+        {'key':0x80,'value':"'SIGNATURE_FLAG_MS_CAT_SIGNED'"},
+        {'key':0x100,'value':"'SIGNATURE_FLAG_CATALOGS_RELOADED'"},
+        {'key':0x200,'value':"'SIGNATURE_FLAG_NO_SIGNATURE'"},
+        {'key':0x400,'value':"'SIGNATURE_FLAG_INVALID_SIGN_CHAIN'"},
+        {'key':0x800,'value':"'SIGNATURE_FLAG_SIGN_HASH_MISMATCH'"},
+        {'key':0x1000,'value':"'SIGNATURE_FLAG_NO_CODE_KEY_USAGE'"},
+        {'key':0x2000,'value':"'SIGNATURE_FLAG_NO_PAGE_HASHES'"},
+        {'key':0x4000,'value':"'SIGNATURE_FLAG_FAILED_CERT_CHECK'"},
+        {'key':0x8000,'value':"'SIGNATURE_FLAG_NO_EMBEDDED_CERT'"},
+        {'key':0x10000,'value':"'SIGNATURE_FLAG_FAILED_COPY_KEYS'"},
+        {'key':0x20000,'value':"'SIGNATURE_FLAG_UNKNOWN_ERROR'"},
+        {'key':0x40000,'value':"'SIGNATURE_FLAG_HAS_VALID_SIGNATURE'"},
+        {'key':0x80000,'value':"'SIGNATURE_FLAG_EMBEDDED_SIGNED'"},
+        {'key':0x100000,'value':"'SIGNATURE_FLAG_3RD_PARTY_ROOT'"},
+        {'key':0x200000,'value':"'SIGNATURE_FLAG_TRUSTED_BOOT_ROOT'"},
+        {'key':0x400000,'value':"'SIGNATURE_FLAG_UEFI_ROOT'"},
+        {'key':0x800000,'value':"'SIGNATURE_FLAG_PRS_WIN81_ROOT'"},
+        {'key':0x1000000,'value':"'SIGNATURE_FLAG_FLIGHT_ROOT'"},
+        {'key':0x2000000,'value':"'SIGNATURE_FLAG_APPLE_SIGNED'"},
+        {'key':0x4000000,'value':"'SIGNATURE_FLAG_ESBCACHE'"},
+        {'key':0x8000000,'value':"'SIGNATURE_FLAG_NO_CACHED_DATA'"}
+      ]
+      combinations = find_hex_combinations(input_hex_str, hexadecimal_list)
+      module_characteristics='('+(', '.join(combinations))+')'
+
+    if mapped_attr["ModuleLoadTelemetryClassification"] in row and row[mapped_attr["ModuleLoadTelemetryClassification"]]!='""' and row[mapped_attr["ModuleLoadTelemetryClassification"]]:
+      if isinstance(row[mapped_attr["ModuleLoadTelemetryClassification"]],float):
+        if math.isnan(row[mapped_attr["ModuleLoadTelemetryClassification"]]):
+          module_load_telemetry_classification=''
+        else:
+          module_load_telemetry_classification=row[mapped_attr["ModuleLoadTelemetryClassification"]].replace('"','')
+      else:
+        module_load_telemetry_classification=row[mapped_attr["ModuleLoadTelemetryClassification"]].replace('"','')
+    else:
+      module_load_telemetry_classification=''
+    if module_load_telemetry_classification:
+      module_load_telemetry_classification=hex(int(module_load_telemetry_classification))
+      input_hex_str=module_load_telemetry_classification
+      hexadecimal_list = [
+        {'key':0x1,'value':"'FIRST_LOAD'"},
+        {'key':0x2,'value':"'RUNDLL32_TARGET'"},
+        {'key':0x4,'value':"'DETECT_TREE'"},
+        {'key':0x8,'value':"'MAPPED_FROM_KERNEL_MODE'"},
+        {'key':0x10,'value':"'UNUSUAL_EXTENSION'"},
+        {'key':0x20,'value':"'MOTW'"},
+        {'key':0x40,'value':"'SIGN_INFO_CONTINUITY'"},
+        {'key':0x80,'value':"'CLOUD_ALL'"}
+      ]
+      combinations = find_hex_combinations(input_hex_str, hexadecimal_list)
+      module_load_telemetry_classification='('+(', '.join(combinations))+')'
+
+    if mapped_attr["ModuleSize"] in row and row[mapped_attr["ModuleSize"]]!='""' and row[mapped_attr["ModuleSize"]]:
+      if isinstance(row[mapped_attr["ModuleSize"]],float):
+        if math.isnan(row[mapped_attr["ModuleSize"]]):
+          module_size=''
+        else:
+          module_size=row[mapped_attr["ModuleSize"]].replace('"','')
+      else:
+        module_size=row[mapped_attr["ModuleSize"]].replace('"','')
+    else:
+      module_size=''
+
+    if mapped_attr["PrimaryModule"] in row and row[mapped_attr["PrimaryModule"]]!='""' and row[mapped_attr["PrimaryModule"]]:
+      if isinstance(row[mapped_attr["PrimaryModule"]],float):
+        if math.isnan(row[mapped_attr["PrimaryModule"]]):
+          primary_module=''
+        else:
+          primary_module=row[mapped_attr["PrimaryModule"]].replace('"','')
+      else:
+        primary_module=row[mapped_attr["PrimaryModule"]].replace('"','')
+    else:
+      primary_module=''
+    if primary_module:
+      primary_module=int(primary_module)
+      if primary_module==0:
+        primary_module="No"
+      elif primary_module==1:
+        primary_module="Yes"
+
     context={}
     context['EVENT_SIMPLE_NAME'] = row[mapped_attr["event_simpleName"]]
     context['PROCESS_INSTANT'] = dt_instant
@@ -2296,6 +2408,11 @@ for index, row in df.iterrows():
     context['UPDATE_FLAG']= update_flag
     context['PATTERN_ID']= pattern_id
     context['PATTERN_DISPOSITION']= pattern_disposition
+    context['MAPPED_FROM_USER_MODE']= mapped_from_user_mode
+    context['MODULE_CHARACTERISTICS']= module_characteristics
+    context['MODULE_LOAD_TELEMETRY_CLASSIFICATION']= module_load_telemetry_classification
+    context['MODULE_SIZE']= module_size
+    context['PRIMARY_MODULE']= primary_module
 
     if pattern_id!='' and pattern_id in detect_patterns:
       context['DETECTION_DESCRIPTION'] = detect_patterns[pattern_id]["description"]
@@ -2540,13 +2657,13 @@ def print_process_tree(process_id, indent='-->'):
             single_process_in_a_tree["name"]=process_details["IMAGE_FILE_NAME"].split("\\")[-1]
           if "MD5" in process_details and process_details["MD5"]!='' and process_details["MD5"]!='unknown':
             print(f'{indent2}Hash (MD5): {process_details["MD5"]}')
-            single_process_printed=single_process_printed+f'Hash (MD5): {process_details["MD5"]}<br/>'
+            single_process_printed=single_process_printed+f'Hash (MD5): <a href="https://www.virustotal.com/gui/file/{process_details["MD5"]}" target="_blank">{process_details["MD5"]}</a><br/>'
           if "SHA1" in process_details and process_details["SHA1"]!="0000000000000000000000000000000000000000" and process_details["SHA1"]!='' and process_details["SHA1"]!='unknown':
             print(f'{indent2}Hash (SHA1): {process_details["SHA1"]}')
-            single_process_printed=single_process_printed+f'Hash (SHA1): {process_details["SHA1"]}<br/>'
+            single_process_printed=single_process_printed+f'Hash (SHA1): <a href="https://www.virustotal.com/gui/file/{process_details["SHA1"]}" target="_blank">{process_details["SHA1"]}</a><br/>'
           if "SHA256" in process_details and process_details["SHA256"]!='' and process_details["SHA256"]!='unknown':
             print(f'{indent2}Hash (SHA256): {process_details["SHA256"]}')
-            single_process_printed=single_process_printed+f'Hash (SHA256): {process_details["SHA256"]}<br/>'
+            single_process_printed=single_process_printed+f'Hash (SHA256): <a href="https://www.virustotal.com/gui/file/{process_details["SHA256"]}" target="_blank">{process_details["SHA256"]}</a><br/>'
           tmp=[]
           if "AUTHENTICATION_ID" in process_details and process_details["AUTHENTICATION_ID"]!='' and process_details["AUTHENTICATION_ID"]!='unknown':
              tmp.append(f'AuthenticationID: {process_details["AUTHENTICATION_ID"]}')
@@ -2771,6 +2888,14 @@ def print_process_tree(process_id, indent='-->'):
               if context["EXECUTABLE_BYTES"]!='':
                 context_details_str=context_details_str+f'{indent4}Executable bytes: {context["EXECUTABLE_BYTES"]}\n'
                 context_details_str2=context_details_str2+f'Executable bytes: {context["EXECUTABLE_BYTES"]}<br/>'
+            elif context['EVENT_SIMPLE_NAME']=="ClassifiedModuleLoad":
+              context_details_str=context_details_str+f'{indent3}Context (at {context["PROCESS_INSTANT"]})   \033[33m{context["EVENT_SIMPLE_NAME"]}\033[0m:\n'
+              context_details_str2=context_details_str2+f'Context (at {context["PROCESS_INSTANT"]})   <span style="color:#fd8d3c">{context["EVENT_SIMPLE_NAME"]}</span>:<br/>'
+              indent4=indent3.replace('-->','    ')
+              context_details_str=context_details_str+f'{indent4}Loaded module: {context["IMAGE_FILE_NAME"]}\n'
+              context_details_str2=context_details_str2+f'Loaded module: {context["IMAGE_FILE_NAME"]}<br/>'
+              context_details_str=context_details_str+f'{indent4}Module size: {context["MODULE_SIZE"]} bytes, Module is primary: {context["PRIMARY_MODULE"]}, Module load telemetry classification: {context["MODULE_LOAD_TELEMETRY_CLASSIFICATION"]}, Module characteristics: {context["MODULE_CHARACTERISTICS"]}\n'
+              context_details_str2=context_details_str2+f'Module size: {context["MODULE_SIZE"]} bytes, Module is primary: {context["PRIMARY_MODULE"]}, Module load telemetry classification: {context["MODULE_LOAD_TELEMETRY_CLASSIFICATION"]}, Module characteristics: {context["MODULE_CHARACTERISTICS"]}<br/>'
             elif context['EVENT_SIMPLE_NAME'] in ("AsepValueUpdate","AsepKeyUpdate"):
               context_details_str=context_details_str+f'{indent3}Context (at {context["PROCESS_INSTANT"]})   \033[33m{context["EVENT_SIMPLE_NAME"]}\033[0m:\n'
               context_details_str2=context_details_str2+f'Context (at {context["PROCESS_INSTANT"]})   <span style="color:#fd8d3c">{context["EVENT_SIMPLE_NAME"]}</span>:<br/>'
@@ -2796,8 +2921,8 @@ def print_process_tree(process_id, indent='-->'):
               context_details_str=context_details_str+f'{indent4}Registry value type: {context["ASEP_VALUE_TYPE"]}, Class: {context["ASEP_CLASS"]}, Flags: {context["ASEP_FLAGS"]}, Index: {context["ASEP_INDEX"]}, Data1: {context["DATA1"]}\n'
               context_details_str2=context_details_str2+f'Registry value type: {context["ASEP_VALUE_TYPE"]}, Class: {context["ASEP_CLASS"]}, Flags: {context["ASEP_FLAGS"]}, Index: {context["ASEP_INDEX"]}, Data1: {context["DATA1"]}<br/>'
               if context["TARGET_FILE_NAME"]!="":
-                context_details_str=context_details_str+f'{indent4}Target file: {context["TARGET_FILE_NAME"]} (SHA26: {context["TARGET_SHA256_HASH_DATA"]})\n'
-                context_details_str2=context_details_str2+f'Target file: {context["TARGET_FILE_NAME"]} (SHA26: {context["TARGET_SHA256_HASH_DATA"]})<br/>'
+                context_details_str=context_details_str+f'{indent4}Target file: {context["TARGET_FILE_NAME"]} (SHA256: {context["TARGET_SHA256_HASH_DATA"]})\n'
+                context_details_str2=context_details_str2+f'Target file: {context["TARGET_FILE_NAME"]} (SHA256: <a href="https://www.virustotal.com/gui/file/{context["TARGET_SHA256_HASH_DATA"]}" target="_blank">{context["TARGET_SHA256_HASH_DATA"]}</a>)<br/>'
             elif context['EVENT_SIMPLE_NAME']=="SuspiciousRegAsepUpdate":
               context_details_str=context_details_str+f'{indent3}Context (at {context["PROCESS_INSTANT"]})   \033[33m{context["EVENT_SIMPLE_NAME"]}\033[0m:\n'
               context_details_str2=context_details_str2+f'Context (at {context["PROCESS_INSTANT"]})   <span style="color:#fd8d3c">{context["EVENT_SIMPLE_NAME"]}</span>:<br/>'
@@ -2828,8 +2953,8 @@ def print_process_tree(process_id, indent='-->'):
               context_details_str=context_details_str+f'{indent4}Registry config value type: {context["REG_CONFIG_VALUE_TYPE"]}, Class: {context["REG_CONFIG_CLASS"]}, Flags: {context["REG_CONFIG_FLAGS"]}, Index: {context["REG_CONFIG_INDEX"]}\n'
               context_details_str2=context_details_str2+f'Registry config value type: {context["REG_CONFIG_VALUE_TYPE"]}, Class: {context["REG_CONFIG_CLASS"]}, Flags: {context["REG_CONFIG_FLAGS"]}, Index: {context["REG_CONFIG_INDEX"]}<br/>'
               if context["TARGET_FILE_NAME"]!="":
-                context_details_str=context_details_str+f'{indent4}Target file: {context["TARGET_FILE_NAME"]} (SHA26: {context["TARGET_SHA256_HASH_DATA"]})\n'
-                context_details_str2=context_details_str2+f'Target file: {context["TARGET_FILE_NAME"]} (SHA26: {context["TARGET_SHA256_HASH_DATA"]})<br/>'
+                context_details_str=context_details_str+f'{indent4}Target file: {context["TARGET_FILE_NAME"]} (SHA256: {context["TARGET_SHA256_HASH_DATA"]})\n'
+                context_details_str2=context_details_str2+f'Target file: {context["TARGET_FILE_NAME"]} (SHA256: <a href="https://www.virustotal.com/gui/file/{context["TARGET_SHA256_HASH_DATA"]}" target="_blank">{context["TARGET_SHA256_HASH_DATA"]}</a>)<br/>'
             elif context['EVENT_SIMPLE_NAME'] in ('UserLogon','UserLogoff','UserLogonFailed','UserLogonFailed2'):
               context_details_str=context_details_str+f'{indent3}Context (at {context["PROCESS_INSTANT"]})   \033[33m{context["EVENT_SIMPLE_NAME"]}\033[0m:\n'
               context_details_str2=context_details_str2+f'Context (at {context["PROCESS_INSTANT"]})   <span style="color:#fd8d3c">{context["EVENT_SIMPLE_NAME"]}</span>:<br/>'
@@ -2840,13 +2965,13 @@ def print_process_tree(process_id, indent='-->'):
 
             if "MD5" in context and context["MD5"]!='':
               context_details_str=context_details_str+f'{indent4}Hash (MD5): {context["MD5"]}\n'
-              context_details_str2=context_details_str2+f'Hash (MD5): {context["MD5"]}<br/>'
+              context_details_str2=context_details_str2+f'Hash (MD5): <a href="https://www.virustotal.com/gui/file/{context["MD5"]}" target="_blank">{context["MD5"]}</a><br/>'
             if "SHA1" in context and context["SHA1"]!="0000000000000000000000000000000000000000" and context["SHA1"]!='':
               context_details_str=context_details_str+f'{indent4}Hash (SHA1): {context["SHA1"]}\n'
-              context_details_str2=context_details_str2+f'Hash (SHA1): {context["SHA1"]}<br/>'
+              context_details_str2=context_details_str2+f'Hash (SHA1): <a href="https://www.virustotal.com/gui/file/{context["SHA1"]}" target="_blank">{context["SHA1"]}</a><br/>'
             if "SHA256" in context and context["SHA256"]!='':
               context_details_str=context_details_str+f'{indent4}Hash (SHA256): {context["SHA256"]}\n'
-              context_details_str2=context_details_str2+f'Hash (SHA256): {context["SHA256"]}<br/>'
+              context_details_str2=context_details_str2+f'Hash (SHA256): <a href="https://www.virustotal.com/gui/file/{context["SHA1"]}" target="_blank">{context["SHA256"]}</a><br/>'
 
             if (context["USERNAME"] or context["AUTHENTICATION_ID"] or context["TOKEN_TYPE"] or context["USER_SID"]) and context['EVENT_SIMPLE_NAME'] not in ('UserLogon','UserLogoff','UserLogonFailed','UserLogonFailed2'):
               indent4=indent3.replace('-->','    ')
