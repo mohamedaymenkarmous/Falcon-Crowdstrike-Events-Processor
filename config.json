@@ -120,6 +120,11 @@
 	    "UpdateFlag":"UPDATEFLAG",
 	    "timestamp":"TIMESTAMP",
 	    "PatternId":"PATTERNID",
-	    "PatternDisposition":"PATTERNDISPOSITION"
+	    "PatternDisposition":"PATTERNDISPOSITION",
+	    "MappedFromUserMode":"MAPPEDFROMUSERMODE",
+	    "ModuleCharacteristics":"MODULECHARACTERISTICS",
+	    "ModuleLoadTelemetryClassification":"MODULELOADTELEMETRYCLASSIFICATION",
+	    "ModuleSize":"MODULESIZE",
+	    "PrimaryModule":"PRIMARYMODULE"
 	}
 }
